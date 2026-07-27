@@ -1,0 +1,152 @@
+# Schlüssel Tresor
+
+Interne Web-Anwendung zur digitalen Abbildung des Schlüsseltresors mit den Plätzen **1 bis 500**.
+Die gesamte Benutzeroberfläche ist vollständig deutschsprachig.
+
+**Technik:** Next.js 14 (App Router) · TypeScript · Supabase (Datenbank, Anmeldung, Echtzeit) ·
+Tailwind CSS · XLSX-Import und -Export · Bereitstellung über Vercel.
+
+---
+
+## 1. Funktionen im Überblick
+
+| Seite | Adresse | Zweck |
+|---|---|---|
+| Anmeldung | `/anmeldung` | Anmeldung mit E-Mail-Adresse und Passwort |
+| Übersicht | `/uebersicht` | Kennzahlen, zuletzt entnommen und zurückgegeben |
+| Digitaler Schlüsseltresor | `/tresor` | Plätze 1–500 in Bereichen zu je 50 |
+| Schlüsselliste | `/schluesselliste` | Suche, Filter, Tabellen- und Kartenansicht |
+| Verlauf | `/verlauf` | Änderungsverlauf, neueste zuerst |
+| Excel-Import | `/import` | Bestandsliste importieren (nur Administrator) |
+| Excel-Export | `/export` | Vier Exportvarianten |
+| Benutzerverwaltung | `/benutzer` | Konten und Rollen (nur Administrator) |
+
+**Statusfarben:** Grün = verfügbar · Gelb = teilweise verfügbar · Rot = entnommen ·
+Grau = kein Schlüssel zugeordnet.
+
+Ein Platz kann beliebig viele Einzelschlüssel und Schlüsselbunde enthalten. Jeder Eintrag wird
+unabhängig entnommen und zurückgegeben.
+
+---
+
+## 2. Datenbankstruktur
+
+**`profiles`** – Benutzerprofile
+`id`, `name`, `email`, `rolle` (`admin` | `mitarbeiter`), `aktiv`, `erstellt_am`
+
+**`keys`** – Schlüssel und Schlüsselbunde
+`id`, `position` (1–500), `schluesselnummer`, `anlage`, `beschriftung`, `farbe`, `ist_bund`,
+`schluesselanzahl`, `kommentar`, `status`, `besitzer_id`, `besitzer_name`, `standort`,
+`verwendungszweck`, `entnommen_am`, `rueckgabe_geplant`, `zuletzt_zurueck_am`,
+`letzte_aenderung_durch`, `erstellt_am`, `geaendert_am`
+
+**`key_events`** – Änderungsverlauf (nur Anfügen)
+`id`, `key_id`, `position`, `schluesselnummer`, `beschriftung`, `aktion`, `benutzer_id`,
+`benutzer_name`, `standort`, `verwendungszweck`, `dauer_sekunden`, `zeitpunkt`
+
+Für `key_events` bestehen bewusst **keine** UPDATE- und DELETE-Regeln. Alte Einträge können dadurch
+weder geändert noch gelöscht werden.
+
+---
+
+## 3. Anleitung: Verbindung mit Supabase
+
+1. Auf <https://supabase.com> anmelden und ein neues Projekt anlegen (Region: Frankfurt/EU).
+2. Im Projekt **SQL Editor** öffnen, den Inhalt von `supabase/schema.sql` vollständig einfügen und
+   **Run** klicken. Optional anschließend `supabase/beispieldaten.sql` ausführen.
+3. Unter **Authentication → Providers → Email** sicherstellen, dass „Email" aktiv ist.
+   Empfehlung für eine interne App: **Enable email confirmations** deaktivieren und
+   **Allow new users to sign up** deaktivieren – Konten legt ausschließlich ein Administrator an.
+4. Unter **Settings → API** die folgenden Werte kopieren:
+   - `Project URL` → `NEXT_PUBLIC_SUPABASE_URL`
+   - `anon public` → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - `service_role` → `SUPABASE_SERVICE_ROLE_KEY` (nur serverseitig, niemals veröffentlichen)
+5. Datei `.env.example` nach `.env.local` kopieren und die Werte eintragen.
+6. Ersten Administrator anlegen: unter **Authentication → Users → Add user** ein Konto erstellen,
+   danach im SQL Editor ausführen:
+   ```sql
+   update public.profiles set rolle = 'admin' where email = 'ihre.adresse@firma.de';
+   ```
+7. Echtzeit prüfen: unter **Database → Replication** müssen die Tabellen `keys` und `key_events`
+   in der Publikation `supabase_realtime` enthalten sein. Das Skript erledigt das bereits.
+
+### Lokal starten
+
+```bash
+npm install
+npm run dev
+```
+
+Die Anwendung läuft danach unter <http://localhost:3000>.
+
+---
+
+## 4. Anleitung: Hochladen auf GitHub
+
+Zuerst auf <https://github.com/new> ein neues Repository anlegen – am besten als **Private**.
+
+```bash
+cd schluessel-tresor
+git init
+git add .
+git commit -m "Schluessel Tresor: erste Version"
+git branch -M main
+git remote add origin https://github.com/IHR-KONTO/schluessel-tresor.git
+git push -u origin main
+```
+
+Die Datei `.gitignore` sorgt dafür, dass `.env.local` und der Ordner der Abhängigkeiten nicht
+hochgeladen werden.
+
+---
+
+## 5. Anleitung: Bereitstellung auf Vercel
+
+1. Auf <https://vercel.com> mit dem GitHub-Konto anmelden.
+2. **Add New → Project** wählen und das Repository `schluessel-tresor` importieren.
+3. Das Framework wird automatisch als **Next.js** erkannt. Build-Einstellungen unverändert lassen.
+4. Unter **Environment Variables** eintragen (für Production, Preview und Development):
+
+   | Name | Wert |
+   |---|---|
+   | `NEXT_PUBLIC_SUPABASE_URL` | Project URL aus Supabase |
+   | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | anon public key |
+   | `SUPABASE_SERVICE_ROLE_KEY` | service_role key |
+
+5. **Deploy** klicken. Nach etwa zwei Minuten ist die Anwendung erreichbar.
+6. In Supabase unter **Authentication → URL Configuration** die Vercel-Adresse als **Site URL**
+   eintragen.
+
+Jeder weitere Push auf `main` löst automatisch eine neue Bereitstellung aus.
+
+---
+
+## 6. Excel-Import
+
+Erwartete Spaltenüberschriften in der ersten Zeile des ersten Tabellenblatts:
+
+`Schlüssel Position` · `Schlüsselnummer/n` · `Anlage/Zugehörigkeit` ·
+`Beschriftung Schlüsselanhänger` · `Farbe Schlüsselanhänger` · `Schlüsselbund?` ·
+`Schlüsselanzahl` · `Kommentar`
+
+- Mehrere Zeilen dürfen dieselbe Schlüsselposition verwenden.
+- `Schlüsselbund?` erkennt `Ja`, `J`, `X`, `Wahr`, `1` als Schlüsselbund.
+- Vor dem Import erscheint eine Vorschau mit Prüfergebnis je Zeile.
+- Zwei Importarten: **Bestand ergänzen** oder **Bestand ersetzen**.
+- Eine passende Vorlage lässt sich auf der Importseite herunterladen.
+
+## 7. Excel-Export
+
+Vier Varianten: gesamter Bestand, nur verfügbare Schlüssel, nur entnommene Schlüssel,
+Änderungsverlauf. Die Exportdateien enthalten alle Bestandsspalten sowie Status, Aktueller Besitzer,
+Aktueller Standort, Entnommen am, Rückgabe geplant, Dauer außerhalb, Zuletzt zurückgegeben und
+Letzte Änderung durch. Alle Spaltenüberschriften sind deutschsprachig.
+
+---
+
+## 8. Hinweise zum Betrieb
+
+- Der `service_role`-Schlüssel wird ausschließlich in `src/app/api/benutzer/route.ts` auf dem Server
+  verwendet und gelangt nie in den Browser.
+- Der Zugriffsschutz erfolgt über Row Level Security in Supabase, nicht nur in der Oberfläche.
+- Die Anwendung ist für Computer, Tablet und Smartphone ausgelegt.
