@@ -44,6 +44,7 @@ export function aktionText(aktion: string): string {
     importiert: "Importiert",
     angelegt: "Angelegt",
     geaendert: "Geändert",
+    geloescht: "Gelöscht",
   };
   return karte[aktion] ?? aktion;
 }

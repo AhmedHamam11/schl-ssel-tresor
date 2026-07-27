@@ -58,7 +58,7 @@ create table if not exists public.key_events (
   position         integer not null,
   schluesselnummer text not null default '',
   beschriftung     text not null default '',
-  aktion           text not null check (aktion in ('entnommen', 'zurueckgegeben', 'importiert', 'angelegt', 'geaendert')),
+  aktion           text not null check (aktion in ('entnommen', 'zurueckgegeben', 'importiert', 'angelegt', 'geaendert', 'geloescht')),
   benutzer_id      uuid references public.profiles (id) on delete set null,
   benutzer_name    text not null default '',
   standort         text,
@@ -124,6 +124,39 @@ as $$
     where p.id = auth.uid() and p.rolle = 'admin'
   );
 $$;
+
+-- ------------------------------------------------------------
+-- 6b) Schutz der Schluesseldaten: nur Administratoren duerfen
+--     Stammdaten aendern. Mitarbeiter duerfen ausschliesslich die
+--     Entnahme-/Rueckgabe-Felder setzen. Diese Pruefung greift
+--     unabhaengig von der Benutzeroberflaeche.
+-- ------------------------------------------------------------
+create or replace function public.pruefe_schluessel_aenderung()
+returns trigger
+language plpgsql security definer set search_path = public
+as $$
+begin
+  if not public.ist_admin() then
+    if new.position is distinct from old.position
+       or new.schluesselnummer is distinct from old.schluesselnummer
+       or new.anlage is distinct from old.anlage
+       or new.beschriftung is distinct from old.beschriftung
+       or new.farbe is distinct from old.farbe
+       or new.ist_bund is distinct from old.ist_bund
+       or new.schluesselanzahl is distinct from old.schluesselanzahl
+       or new.kommentar is distinct from old.kommentar
+    then
+      raise exception 'Nur Administratoren duerfen Schluesseldaten bearbeiten.';
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists keys_pruefe_aenderung on public.keys;
+create trigger keys_pruefe_aenderung
+  before update on public.keys
+  for each row execute function public.pruefe_schluessel_aenderung();
 
 -- ------------------------------------------------------------
 -- 7) Zeilenschutz (Row Level Security)

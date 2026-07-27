@@ -145,6 +145,7 @@ export function SchluesselFormularDialog({
         position,
         schluesselnummer: satz.schluesselnummer,
         beschriftung: satz.beschriftung,
+        anlage: satz.anlage,
         aktion: "geaendert",
         benutzer_id: profil?.id ?? null,
         benutzer_name: profil?.name ?? "",
@@ -161,6 +162,7 @@ export function SchluesselFormularDialog({
         position,
         schluesselnummer: satz.schluesselnummer,
         beschriftung: satz.beschriftung,
+        anlage: satz.anlage,
         aktion: "angelegt",
         benutzer_id: profil?.id ?? null,
         benutzer_name: profil?.name ?? "",
@@ -356,22 +358,27 @@ export function SchluesselLoeschenDialog({
     setLaeuft(true);
     setFehler(null);
 
-    await supabase.from("key_events").insert({
-      key_id: schluessel.id,
-      position: schluessel.position,
-      schluesselnummer: schluessel.schluesselnummer,
-      beschriftung: schluessel.beschriftung,
-      aktion: "geloescht",
-      benutzer_id: profil?.id ?? null,
-      benutzer_name: profil?.name ?? "",
-    });
-
+    // Zuerst loeschen, danach den Verlaufseintrag schreiben. So entsteht
+    // niemals eine E-Mail zu einer Loeschung, die gar nicht stattgefunden hat.
     const { error } = await supabase.from("keys").delete().eq("id", schluessel.id);
     if (error) {
       setLaeuft(false);
       setFehler(fehlerText(error.message));
       return;
     }
+
+    // key_id bleibt leer: Der Schluessel existiert nicht mehr. Alle fuer die
+    // E-Mail noetigen Angaben stehen im Verlaufseintrag selbst.
+    await supabase.from("key_events").insert({
+      key_id: null,
+      position: schluessel.position,
+      schluesselnummer: schluessel.schluesselnummer,
+      beschriftung: schluessel.beschriftung,
+      anlage: schluessel.anlage,
+      aktion: "geloescht",
+      benutzer_id: profil?.id ?? null,
+      benutzer_name: profil?.name ?? "",
+    });
 
     setLaeuft(false);
     schliessen();

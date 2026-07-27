@@ -38,7 +38,8 @@ export type Aktion =
   | "zurueckgegeben"
   | "importiert"
   | "angelegt"
-  | "geaendert";
+  | "geaendert"
+  | "geloescht";
 
 export interface Ereignis {
   id: string;
@@ -46,6 +47,7 @@ export interface Ereignis {
   position: number;
   schluesselnummer: string;
   beschriftung: string;
+  anlage: string;
   aktion: Aktion;
   benutzer_id: string | null;
   benutzer_name: string;
@@ -56,3 +58,27 @@ export interface Ereignis {
 }
 
 export type PlatzStatus = "leer" | "verfuegbar" | "teilweise" | "entnommen";
+
+export interface Benachrichtigungseinstellungen {
+  id: number;
+  bei_entnahme: boolean;
+  bei_rueckgabe: boolean;
+  bei_neuem_schluessel: boolean;
+  bei_loeschung: boolean;
+  geaendert_am: string;
+  geaendert_durch: string;
+}
+
+export type Versandstatus = "erfolgreich" | "fehlgeschlagen" | "uebersprungen";
+
+export interface Benachrichtigungsprotokoll {
+  id: string;
+  event_id: string;
+  aktion: string;
+  status: Versandstatus;
+  empfaenger: string[];
+  empfaenger_anzahl: number;
+  fehlermeldung: string | null;
+  resend_id: string | null;
+  zeitpunkt: string;
+}

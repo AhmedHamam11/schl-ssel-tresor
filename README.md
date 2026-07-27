@@ -27,6 +27,19 @@ Grau = kein Schlüssel zugeordnet.
 Ein Platz kann beliebig viele Einzelschlüssel und Schlüsselbunde enthalten. Jeder Eintrag wird
 unabhängig entnommen und zurückgegeben.
 
+### Manuelle Schlüsselverwaltung durch Administratoren
+
+Administratoren sehen auf den Seiten **Digitaler Schlüsseltresor** und **Schlüsselliste** die
+Schaltfläche „Schlüssel hinzufügen“. Damit lässt sich ein Tresorplatz (1–500) wählen und ein
+Einzelschlüssel oder Schlüsselbund mit Schlüsselnummer, Anlage/Zugehörigkeit, Beschriftung,
+Anhängerfarbe, Art und Schlüsselanzahl sowie Kommentar anlegen. Jeder Schlüsseleintrag zeigt
+Administratoren zusätzlich „Bearbeiten“ und „Löschen“. Vor dem Löschen erscheint ein
+Bestätigungsdialog mit Platznummer und Beschriftung. Anlage, Änderung und Löschung werden mit
+Administratorname und Zeitpunkt im Verlauf gespeichert (`angelegt`, `geaendert`, `geloescht`).
+Mitarbeiter sehen diese Schaltflächen nicht und können ausschließlich Schlüssel entnehmen und
+zurückgeben – das wird zusätzlich serverseitig über Row Level Security und einen Datenbanktrigger
+erzwungen, nicht nur durch ausgeblendete Schaltflächen in der Oberfläche.
+
 ---
 
 ## 2. Datenbankstruktur
@@ -150,3 +163,56 @@ Letzte Änderung durch. Alle Spaltenüberschriften sind deutschsprachig.
   verwendet und gelangt nie in den Browser.
 - Der Zugriffsschutz erfolgt über Row Level Security in Supabase, nicht nur in der Oberfläche.
 - Die Anwendung ist für Computer, Tablet und Smartphone ausgelegt.
+
+## E-Mail-Benachrichtigungen einrichten
+
+Alle aktiven Benutzer werden automatisch auf Deutsch informiert, wenn ein Schlüssel
+entnommen, zurückgegeben, hinzugefügt oder gelöscht wird.
+
+### 1. Migration ausführen
+`supabase/002_benachrichtigungen.sql` im Supabase SQL-Editor vollständig ausführen.
+Sie legt an:
+- Spalte `anlage` in `key_events` (damit E-Mails auch nach dem Löschen vollständig sind)
+- Tabelle `notification_settings` (die vier Schalter, nur Administratoren dürfen ändern)
+- Tabelle `notification_log` (Versandprotokoll, `event_id` eindeutig = Schutz vor Doppelversand)
+- Funktion `aktive_empfaenger()`
+
+### 2. Edge Function veröffentlichen
+```
+supabase functions deploy benachrichtigung-senden --no-verify-jwt
+```
+Die Funktion liegt unter `supabase/functions/benachrichtigung-senden/index.ts`.
+Sie liest **ausschließlich** den Verlaufseintrag aus `key_events` und greift nie auf
+`keys` zu. Dadurch bleibt die E-Mail auch dann vollständig, wenn der Schlüssel im
+selben Moment gelöscht wurde.
+
+### 3. Secrets setzen
+```
+supabase secrets set RESEND_API_KEY=re_xxx
+supabase secrets set MAIL_ABSENDER="Schlüssel Tresor <tresor@ihre-domain.de>"
+supabase secrets set APP_URL=https://ihre-app-adresse
+supabase secrets set WEBHOOK_SECRET=ein-langes-zufaelliges-geheimnis
+```
+Der Resend-Schlüssel steht nur als Secret in Supabase, niemals im Quelltext oder im Browser.
+
+### 4. Database Webhook anlegen
+Supabase → Database → Webhooks → Create a new hook
+- Name: `benachrichtigung_key_events`
+- Table: `public.key_events`, Events: **Insert**
+- Type: Supabase Edge Functions → `benachrichtigung-senden`, Methode POST, Timeout 5000 ms
+- HTTP Header: `x-webhook-secret` = derselbe Wert wie `WEBHOOK_SECRET`
+
+### 5. In der App
+Administratoren finden in der Navigation den Punkt **E-Mail-Benachrichtigungen**.
+Dort lassen sich die vier Ereignisse einzeln ein- und ausschalten, eine Test-E-Mail
+senden und die letzten Versandvorgänge einsehen.
+Für die Test-E-Mail muss `WEBHOOK_SECRET` zusätzlich in `.env.local` der Web-App stehen.
+
+### Verhalten
+- Die Schlüsselaktion wird immer zuerst in der Datenbank gespeichert. Scheitert der
+  E-Mail-Versand, bleibt die Aktion bestehen und wird nur im Protokoll als
+  fehlgeschlagen vermerkt.
+- Pro Verlaufseintrag entsteht höchstens eine E-Mail: Der Sperreintrag in
+  `notification_log` wird vor dem Versand geschrieben, zusätzlich sendet die Funktion
+  die Event-ID als `Idempotency-Key` an Resend.
+- Import und Bearbeitung lösen bewusst keine E-Mail aus.

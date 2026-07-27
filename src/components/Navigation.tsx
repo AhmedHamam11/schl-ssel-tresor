@@ -13,6 +13,7 @@ const SEITEN = [
   { pfad: "/import", titel: "Excel-Import", nurAdmin: true },
   { pfad: "/export", titel: "Excel-Export" },
   { pfad: "/benutzer", titel: "Benutzerverwaltung", nurAdmin: true },
+  { pfad: "/benachrichtigungen", titel: "E-Mail-Benachrichtigungen", nurAdmin: true },
 ];
 
 export default function Navigation() {

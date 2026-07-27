@@ -88,6 +88,7 @@ export default function ImportSeite() {
     await supabase.from("key_events").insert({
       position: gueltige[0].position!,
       schluesselnummer: "",
+      anlage: "",
       beschriftung: `Excel-Import: ${gueltige.length} Datensätze aus ${dateiname}`,
       aktion: "importiert",
       benutzer_id: profil?.id ?? null,
