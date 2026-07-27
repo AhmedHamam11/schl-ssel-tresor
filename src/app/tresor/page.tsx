@@ -4,7 +4,9 @@ import { useMemo, useState } from "react";
 import SeitenRahmen from "@/components/SeitenRahmen";
 import { Laden, StatusPunkt, StatusSchild } from "@/components/Bausteine";
 import SchluesselKarte from "@/components/SchluesselKarte";
+import { SchluesselFormularDialog } from "@/components/SchluesselVerwaltenDialog";
 import { useBestand } from "@/components/Datenbestand";
+import { useSitzung } from "@/components/Sitzung";
 import { platzStatus, statusFarbe } from "@/lib/status";
 import type { PlatzStatus, Schluessel } from "@/lib/typen";
 
@@ -15,9 +17,13 @@ const BEREICHE = Array.from({ length: 10 }, (_, i) => ({
 
 export default function TresorSeite() {
   const { schluessel, laedt } = useBestand();
+  const { profil } = useSitzung();
+  const istAdmin = profil?.rolle === "admin";
   const [bereich, setBereich] = useState(0);
   const [platz, setPlatz] = useState<number | null>(null);
   const [nurBelegte, setNurBelegte] = useState(false);
+  const [neuAnlegen, setNeuAnlegen] = useState<number | undefined>(undefined);
+  const [dialogOffen, setDialogOffen] = useState(false);
 
   const proPlatz = useMemo(() => {
     const karte = new Map<number, Schluessel[]>();
@@ -32,10 +38,25 @@ export default function TresorSeite() {
 
   const gewaehlt = platz !== null ? proPlatz.get(platz) ?? [] : [];
 
+  function neuenSchluesselAnlegen(vorgabePosition?: number) {
+    setNeuAnlegen(vorgabePosition);
+    setDialogOffen(true);
+  }
+
   return (
     <SeitenRahmen
       titel="Digitaler Schlüsseltresor"
       beschreibung="Die Plätze 1 bis 500 in Bereichen zu je 50. Ein Klick auf einen Platz zeigt alle dort hinterlegten Schlüssel."
+      aktion={
+        istAdmin ? (
+          <button
+            onClick={() => neuenSchluesselAnlegen(platz ?? undefined)}
+            className="rounded-md bg-tresor-blau px-4 py-2.5 text-sm font-semibold text-white hover:brightness-110"
+          >
+            Schlüssel hinzufügen
+          </button>
+        ) : undefined
+      }
     >
       {laedt ? (
         <Laden />
@@ -140,6 +161,14 @@ export default function TresorSeite() {
                 </div>
                 <div className="flex items-center gap-3">
                   <StatusSchild status={platzStatus(gewaehlt)} />
+                  {istAdmin && (
+                    <button
+                      onClick={() => neuenSchluesselAnlegen(platz)}
+                      className="rounded-md border border-tresor-blau px-3 py-1.5 text-sm font-semibold text-tresor-blau hover:bg-tresor-blau/5"
+                    >
+                      Schlüssel hinzufügen
+                    </button>
+                  )}
                   <button
                     onClick={() => setPlatz(null)}
                     className="rounded-md border border-tresor-line px-3 py-1.5 text-sm font-medium hover:bg-tresor-bg"
@@ -151,8 +180,10 @@ export default function TresorSeite() {
 
               {gewaehlt.length === 0 ? (
                 <p className="py-8 text-center text-sm text-tresor-muted">
-                  Diesem Platz ist derzeit kein Schlüssel zugeordnet. Über den Excel-Import können
-                  Administratoren Schlüssel hinterlegen.
+                  Diesem Platz ist derzeit kein Schlüssel zugeordnet.
+                  {istAdmin
+                    ? " Nutzen Sie „Schlüssel hinzufügen“, um einen Eintrag anzulegen."
+                    : " Ein Administrator kann hier einen Schlüssel hinterlegen."}
                 </p>
               ) : (
                 <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -164,6 +195,13 @@ export default function TresorSeite() {
             </section>
           )}
         </div>
+      )}
+
+      {dialogOffen && istAdmin && (
+        <SchluesselFormularDialog
+          vorgabePosition={neuAnlegen}
+          schliessen={() => setDialogOffen(false)}
+        />
       )}
     </SeitenRahmen>
   );

@@ -5,7 +5,9 @@ import SeitenRahmen from "@/components/SeitenRahmen";
 import { Laden, Leer, StatusSchild } from "@/components/Bausteine";
 import SchluesselKarte from "@/components/SchluesselKarte";
 import { EntnahmeDialog, RueckgabeDialog } from "@/components/SchluesselDialoge";
+import { SchluesselFormularDialog, SchluesselLoeschenDialog } from "@/components/SchluesselVerwaltenDialog";
 import { useBestand } from "@/components/Datenbestand";
+import { useSitzung } from "@/components/Sitzung";
 import { platzStatus } from "@/lib/status";
 import { datumZeit, dauerSeit } from "@/lib/format";
 import type { Schluessel } from "@/lib/typen";
@@ -14,9 +16,12 @@ type Filter = "alle" | "verfuegbar" | "teilweise" | "entnommen";
 
 export default function SchluessellisteSeite() {
   const { schluessel, laedt } = useBestand();
+  const { profil } = useSitzung();
+  const istAdmin = profil?.rolle === "admin";
   const [suche, setSuche] = useState("");
   const [filter, setFilter] = useState<Filter>("alle");
   const [ansicht, setAnsicht] = useState<"tabelle" | "karten">("tabelle");
+  const [neuAnlegen, setNeuAnlegen] = useState(false);
 
   const teilweisePlaetze = useMemo(() => {
     const karte = new Map<number, Schluessel[]>();
@@ -61,6 +66,16 @@ export default function SchluessellisteSeite() {
     <SeitenRahmen
       titel="Schlüsselliste"
       beschreibung="Suchen Sie nach Platznummer, Schlüsselnummer, Beschriftung, Anlage oder aktuellem Besitzer."
+      aktion={
+        istAdmin ? (
+          <button
+            onClick={() => setNeuAnlegen(true)}
+            className="rounded-md bg-tresor-blau px-4 py-2.5 text-sm font-semibold text-white hover:brightness-110"
+          >
+            Schlüssel hinzufügen
+          </button>
+        ) : undefined
+      }
     >
       {laedt ? (
         <Laden />
@@ -119,7 +134,7 @@ export default function SchluessellisteSeite() {
             </div>
           ) : (
             <div className="overflow-x-auto rounded-lg border border-tresor-line bg-white">
-              <table className="w-full min-w-[1000px] text-sm">
+              <table className="w-full min-w-[1100px] text-sm">
                 <thead className="bg-tresor-bg text-left text-xs uppercase tracking-wide text-tresor-muted">
                   <tr>
                     <th className="px-4 py-3">Platz</th>
@@ -135,11 +150,12 @@ export default function SchluessellisteSeite() {
                     <th className="px-4 py-3">Entnommen am</th>
                     <th className="px-4 py-3">Dauer außerhalb</th>
                     <th className="px-4 py-3 text-right">Aktion</th>
+                    {istAdmin && <th className="px-4 py-3 text-right">Verwaltung</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-tresor-line">
                   {gefiltert.map((k) => (
-                    <Zeile key={k.id} schluessel={k} />
+                    <Zeile key={k.id} schluessel={k} istAdmin={istAdmin} />
                   ))}
                 </tbody>
               </table>
@@ -147,14 +163,18 @@ export default function SchluessellisteSeite() {
           )}
         </div>
       )}
+
+      {neuAnlegen && istAdmin && (
+        <SchluesselFormularDialog schliessen={() => setNeuAnlegen(false)} />
+      )}
     </SeitenRahmen>
   );
 }
 
-function Zeile({ schluessel }: { schluessel: Schluessel }) {
-  const [dialog, setDialog] = useState(false);
+function Zeile({ schluessel, istAdmin }: { schluessel: Schluessel; istAdmin: boolean }) {
+  const [dialog, setDialog] = useState<"aktion" | "bearbeiten" | "loeschen" | null>(null);
   const entnommen = schluessel.status === "entnommen";
-  const Dialog = entnommen ? RueckgabeDialog : EntnahmeDialog;
+  const AktionsDialog = entnommen ? RueckgabeDialog : EntnahmeDialog;
 
   return (
     <tr className="hover:bg-tresor-bg/60">
@@ -180,15 +200,41 @@ function Zeile({ schluessel }: { schluessel: Schluessel }) {
       </td>
       <td className="px-4 py-3 text-right">
         <button
-          onClick={() => setDialog(true)}
+          onClick={() => setDialog("aktion")}
           className={`whitespace-nowrap rounded-md px-3 py-2 text-xs font-semibold text-white ${
             entnommen ? "bg-status-gruen" : "bg-tresor-blau"
           }`}
         >
           {entnommen ? "Zurückgeben" : "Entnehmen"}
         </button>
-        {dialog && <Dialog schluessel={schluessel} schliessen={() => setDialog(false)} />}
       </td>
+      {istAdmin && (
+        <td className="px-4 py-3 text-right">
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={() => setDialog("bearbeiten")}
+              className="whitespace-nowrap rounded-md border border-tresor-line px-3 py-2 text-xs font-semibold text-tresor-text hover:bg-tresor-bg"
+            >
+              Bearbeiten
+            </button>
+            <button
+              onClick={() => setDialog("loeschen")}
+              className="whitespace-nowrap rounded-md border border-status-rot/30 px-3 py-2 text-xs font-semibold text-status-rot hover:bg-status-rot/5"
+            >
+              Löschen
+            </button>
+          </div>
+        </td>
+      )}
+      {dialog === "aktion" && (
+        <AktionsDialog schluessel={schluessel} schliessen={() => setDialog(null)} />
+      )}
+      {dialog === "bearbeiten" && istAdmin && (
+        <SchluesselFormularDialog schluessel={schluessel} schliessen={() => setDialog(null)} />
+      )}
+      {dialog === "loeschen" && istAdmin && (
+        <SchluesselLoeschenDialog schluessel={schluessel} schliessen={() => setDialog(null)} />
+      )}
     </tr>
   );
 }

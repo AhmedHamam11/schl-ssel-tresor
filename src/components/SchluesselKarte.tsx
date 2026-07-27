@@ -4,10 +4,16 @@ import { useState } from "react";
 import type { Schluessel } from "@/lib/typen";
 import { StatusSchild } from "./Bausteine";
 import { EntnahmeDialog, RueckgabeDialog } from "./SchluesselDialoge";
+import { SchluesselFormularDialog, SchluesselLoeschenDialog } from "./SchluesselVerwaltenDialog";
+import { useSitzung } from "./Sitzung";
 import { datumZeit, dauerSeit } from "@/lib/format";
 
 export default function SchluesselKarte({ schluessel }: { schluessel: Schluessel }) {
-  const [dialog, setDialog] = useState<"entnahme" | "rueckgabe" | null>(null);
+  const { profil } = useSitzung();
+  const istAdmin = profil?.rolle === "admin";
+  const [dialog, setDialog] = useState<"entnahme" | "rueckgabe" | "bearbeiten" | "loeschen" | null>(
+    null
+  );
   const entnommen = schluessel.status === "entnommen";
 
   return (
@@ -91,11 +97,34 @@ export default function SchluesselKarte({ schluessel }: { schluessel: Schluessel
         {entnommen ? "Schlüssel zurückgeben" : "Schlüssel entnehmen"}
       </button>
 
+      {istAdmin && (
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          <button
+            onClick={() => setDialog("bearbeiten")}
+            className="rounded-md border border-tresor-line px-3 py-2 text-xs font-semibold text-tresor-text hover:bg-tresor-bg"
+          >
+            Bearbeiten
+          </button>
+          <button
+            onClick={() => setDialog("loeschen")}
+            className="rounded-md border border-status-rot/30 px-3 py-2 text-xs font-semibold text-status-rot hover:bg-status-rot/5"
+          >
+            Löschen
+          </button>
+        </div>
+      )}
+
       {dialog === "entnahme" && (
         <EntnahmeDialog schluessel={schluessel} schliessen={() => setDialog(null)} />
       )}
       {dialog === "rueckgabe" && (
         <RueckgabeDialog schluessel={schluessel} schliessen={() => setDialog(null)} />
+      )}
+      {dialog === "bearbeiten" && istAdmin && (
+        <SchluesselFormularDialog schluessel={schluessel} schliessen={() => setDialog(null)} />
+      )}
+      {dialog === "loeschen" && istAdmin && (
+        <SchluesselLoeschenDialog schluessel={schluessel} schliessen={() => setDialog(null)} />
       )}
     </div>
   );
