@@ -41,12 +41,42 @@ const eingabe =
   "mt-1 w-full rounded-md border border-tresor-line bg-white px-3 py-2.5 text-sm text-tresor-text placeholder:text-tresor-muted focus:border-tresor-blau focus:outline-none focus-visible:ring-2 focus-visible:ring-tresor-blau/30";
 const beschriftungsKlasse = "block text-sm font-medium text-tresor-text";
 
+const BESCHRIFTUNGSFARBEN: readonly BeschriftungFarbe[] = [
+  "Blau",
+  "Rot",
+  "Grau",
+  "Weiß",
+  "Violett",
+  "Orange",
+  "Schwarz",
+  "Gelb",
+  "Grün",
+];
+
+const FARBCODES: Record<BeschriftungFarbe, string> = {
+  Blau: "#2563EB",
+  Rot: "#DC2626",
+  Grau: "#6B7280",
+  Weiß: "#FFFFFF",
+  Violett: "#7C3AED",
+  Orange: "#F97316",
+  Schwarz: "#111827",
+  Gelb: "#EAB308",
+  Grün: "#16A34A",
+};
+
+function istBeschriftungFarbe(wert: unknown): wert is BeschriftungFarbe {
+  return (
+    typeof wert === "string" &&
+    (BESCHRIFTUNGSFARBEN as readonly string[]).includes(wert)
+  );
+}
+
 interface Formular {
   position: string;
   schluesselnummer: string;
   anlage: string;
   beschriftung: string;
-  farbe: string;
   beschriftung_farbe: BeschriftungFarbe;
   ist_bund: boolean;
   schluesselanzahl: string;
@@ -59,7 +89,6 @@ function leeresFormular(vorgabePosition?: number): Formular {
     schluesselnummer: "",
     anlage: "",
     beschriftung: "",
-    farbe: "",
     beschriftung_farbe: "Grau",
     ist_bund: false,
     schluesselanzahl: "1",
@@ -68,15 +97,20 @@ function leeresFormular(vorgabePosition?: number): Formular {
 }
 
 function ausSchluessel(k: Schluessel): Formular {
+  const gespeicherteFarbe = istBeschriftungFarbe(k.beschriftung_farbe)
+    ? k.beschriftung_farbe
+    : istBeschriftungFarbe(k.farbe)
+      ? k.farbe
+      : "Grau";
+
   return {
     position: String(k.position),
     schluesselnummer: k.schluesselnummer,
     anlage: k.anlage,
     beschriftung: k.beschriftung,
-    farbe: k.farbe,
     ist_bund: k.ist_bund,
     schluesselanzahl: String(k.schluesselanzahl),
-    beschriftung_farbe: k.beschriftung_farbe ?? "#6B7280",
+    beschriftung_farbe: gespeicherteFarbe,
     kommentar: k.kommentar,
   };
 }
@@ -129,7 +163,10 @@ export function SchluesselFormularDialog({
       schluesselnummer: feld.schluesselnummer.trim(),
       anlage: feld.anlage.trim(),
       beschriftung: feld.beschriftung.trim(),
-      farbe: feld.farbe.trim(),
+      beschriftung_farbe: feld.beschriftung_farbe,
+      // Übergangsweise synchron halten, bis alle übrigen Komponenten
+      // ausschließlich beschriftung_farbe verwenden.
+      farbe: feld.beschriftung_farbe,
       ist_bund: feld.ist_bund,
       schluesselanzahl: anzahl,
       kommentar: feld.kommentar.trim(),
@@ -246,15 +283,33 @@ export function SchluesselFormularDialog({
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <label htmlFor="sv-farbe" className={beschriftungsKlasse}>
+            <label htmlFor="sv-beschriftung-farbe" className={beschriftungsKlasse}>
               Farbe des Schlüsselanhängers
             </label>
-            <input
-              id="sv-farbe"
-              className={eingabe}
-              value={feld.farbe}
-              onChange={(e) => setzen("farbe", e.target.value)}
-            />
+            <div className="mt-1 flex items-center gap-3">
+              <span
+                aria-hidden="true"
+                className="h-6 w-6 shrink-0 rounded-full border border-tresor-line"
+                style={{ backgroundColor: FARBCODES[feld.beschriftung_farbe] }}
+              />
+              <select
+                id="sv-beschriftung-farbe"
+                className={`${eingabe} mt-0`}
+                value={feld.beschriftung_farbe}
+                onChange={(e) =>
+                  setzen(
+                    "beschriftung_farbe",
+                    e.target.value as BeschriftungFarbe
+                  )
+                }
+              >
+                {BESCHRIFTUNGSFARBEN.map((farbe) => (
+                  <option key={farbe} value={farbe}>
+                    {farbe}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
           <div>
             <label htmlFor="sv-anzahl" className={beschriftungsKlasse}>
