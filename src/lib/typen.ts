@@ -10,14 +10,35 @@ export interface Profil {
   erstellt_am: string;
 }
 
+export type BeschriftungFarbe =
+  | "Blau"
+  | "Rot"
+  | "Grau"
+  | "Weiß"
+  | "Violett"
+  | "Orange"
+  | "Schwarz"
+  | "Gelb"
+  | "Grün";
+
+export interface SchluesselAnhaenger {
+  text: string;
+  farbe: BeschriftungFarbe | null;
+}
+
 export interface Schluessel {
   id: string;
   position: number;
   schluesselnummer: string;
   anlage: string;
+  /** Legacy-Feld: entspricht dem Text des ersten Anhängers. */
   beschriftung: string;
+  /** Legacy-Feld: entspricht der Farbe des ersten Anhängers. */
   farbe: string;
-  beschriftung_farbe: BeschriftungFarbe;
+  /** Legacy-Feld: entspricht der Farbe des ersten Anhängers. */
+  beschriftung_farbe: BeschriftungFarbe | null;
+  /** Beliebig viele Anhänger, jeweils mit eigenem Text und eigener optionaler Farbe. */
+  anhaenger: SchluesselAnhaenger[];
   ist_bund: boolean;
   schluesselanzahl: number;
   kommentar: string;
@@ -34,17 +55,6 @@ export interface Schluessel {
   geaendert_am: string;
 }
 
-export type BeschriftungFarbe =
-  | "Blau"
-  | "Rot"
-  | "Grau"
-  | "Weiß"
-  | "Violett"
-  | "Orange"
-  | "Schwarz"
-  | "Gelb"
-  | "Grün";
-
 export type Aktion =
   | "entnommen"
   | "zurueckgegeben"
@@ -60,6 +70,7 @@ export interface Ereignis {
   schluesselnummer: string;
   beschriftung: string;
   anlage: string;
+  anhaenger: SchluesselAnhaenger[];
   aktion: Aktion;
   benutzer_id: string | null;
   benutzer_name: string;

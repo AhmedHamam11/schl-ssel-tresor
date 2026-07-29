@@ -45,6 +45,7 @@ interface Verlaufseintrag {
   schluesselnummer: string;
   beschriftung: string;
   anlage: string;
+  anhaenger?: { text?: string; farbe?: string | null }[];
   aktion: string;
   benutzer_id: string | null;
   benutzer_name: string;
@@ -107,7 +108,11 @@ function maskieren(text: string): string {
 function nachrichtBauen(e: Verlaufseintrag) {
   const daten = AKTIONEN[e.aktion];
   const betreff = `${daten.text} \u2013 Position ${e.position}`;
-  const bezeichnung = e.beschriftung || e.schluesselnummer || "Ohne Beschriftung";
+  const anhaengerTexte = Array.isArray(e.anhaenger)
+    ? e.anhaenger.map((a) => String(a?.text ?? "").trim()).filter(Boolean)
+    : [];
+  const bezeichnung =
+    anhaengerTexte.join(", ") || e.beschriftung || e.schluesselnummer || "Ohne Beschriftung";
 
   const zeilen: [string, string][] = [
     ["Aktion", daten.text],

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import SeitenRahmen from "@/components/SeitenRahmen";
 import { Laden, StatusPunkt, StatusSchild } from "@/components/Bausteine";
 import SchluesselKarte from "@/components/SchluesselKarte";
@@ -8,8 +8,13 @@ import { SchluesselFormularDialog } from "@/components/SchluesselVerwaltenDialog
 import { useBestand } from "@/components/Datenbestand";
 import { useSitzung } from "@/components/Sitzung";
 import { platzStatus, statusFarbe } from "@/lib/status";
-import { farbText, farbCss } from "@/lib/format";
-import type { PlatzStatus, Schluessel, FarbStatistik } from "@/lib/typen";
+import {
+  BESCHRIFTUNGSFARBEN,
+  anhaengerDesSchluessels,
+  farbStil,
+  primaereBeschriftung,
+} from "@/lib/anhaenger";
+import type { FarbStatistik, PlatzStatus, Schluessel } from "@/lib/typen";
 
 const BEREICHE = Array.from({ length: 10 }, (_, i) => ({
   von: i * 50 + 1,
@@ -23,7 +28,6 @@ export default function TresorSeite() {
   const [bereich, setBereich] = useState(0);
   const [platz, setPlatz] = useState<number | null>(null);
   const [nurBelegte, setNurBelegte] = useState(false);
-  const [farbStats, setFarbStats] = useState<FarbStatistik[]>([]);
   const [neuAnlegen, setNeuAnlegen] = useState<number | undefined>(undefined);
   const [dialogOffen, setDialogOffen] = useState(false);
 
@@ -37,6 +41,20 @@ export default function TresorSeite() {
   const plaetze = Array.from({ length: aktiv.bis - aktiv.von + 1 }, (_, i) => aktiv.von + i).filter(
     (nr) => !nurBelegte || (proPlatz.get(nr)?.length ?? 0) > 0
   );
+
+  const farbStatistik = useMemo<FarbStatistik[]>(() => {
+    const zaehler = new Map(BESCHRIFTUNGSFARBEN.map((farbe) => [farbe, 0]));
+    schluessel
+      .filter((k) => k.position >= aktiv.von && k.position <= aktiv.bis)
+      .forEach((k) => {
+        anhaengerDesSchluessels(k).forEach((a) => {
+          if (a.farbe) zaehler.set(a.farbe, (zaehler.get(a.farbe) ?? 0) + 1);
+        });
+      });
+    return BESCHRIFTUNGSFARBEN.map((farbe) => ({ farbe, anzahl: zaehler.get(farbe) ?? 0 })).filter(
+      (eintrag) => eintrag.anzahl > 0
+    );
+  }, [aktiv.bis, aktiv.von, schluessel]);
 
   const gewaehlt = platz !== null ? proPlatz.get(platz) ?? [] : [];
 
@@ -105,13 +123,45 @@ export default function TresorSeite() {
                   }`}
                 >
                   {b.von}–{b.bis}
-                  <span className={`ml-1.5 text-xs font-normal ${i === bereich ? "text-white/70" : "text-tresor-muted"}`}>
+                  <span
+                    className={`ml-1.5 text-xs font-normal ${
+                      i === bereich ? "text-white/70" : "text-tresor-muted"
+                    }`}
+                  >
                     ({anzahl})
                   </span>
                 </button>
               );
             })}
           </div>
+
+          {farbStatistik.length > 0 && (
+            <div className="rounded-lg border border-tresor-line bg-white px-4 py-3">
+              <div className="text-sm font-semibold text-tresor-text">
+                Anhängerfarben im Bereich {aktiv.von}–{aktiv.bis}
+              </div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {farbStatistik.map((eintrag) => {
+                  const stil = farbStil(eintrag.farbe);
+                  return (
+                    <span
+                      key={eintrag.farbe}
+                      className="inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-xs font-medium"
+                      style={{ borderColor: stil.rand }}
+                    >
+                      <span
+                        className="h-3 w-3 rounded-full border"
+                        style={{ backgroundColor: stil.hintergrund, borderColor: stil.rand }}
+                        aria-hidden
+                      />
+                      {eintrag.farbe}
+                      <strong className="tabular-nums">{eintrag.anzahl}</strong>
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {plaetze.length === 0 ? (
             <div className="rounded-lg border border-dashed border-tresor-line bg-white p-10 text-center text-sm text-tresor-muted">
@@ -140,8 +190,8 @@ export default function TresorSeite() {
                       {eintraege.length === 0
                         ? "leer"
                         : eintraege.length === 1
-                        ? eintraege[0].beschriftung || eintraege[0].schluesselnummer || "1 Eintrag"
-                        : `${eintraege.length} Einträge`}
+                          ? primaereBeschriftung(eintraege[0])
+                          : `${eintraege.length} Einträge`}
                     </div>
                   </button>
                 );

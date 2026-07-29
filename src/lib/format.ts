@@ -50,43 +50,31 @@ export function aktionText(aktion: string): string {
 }
 
 export function fehlerText(nachricht: string | undefined): string {
-  const text = (nachricht ?? "").toLowerCase();
+  const original = (nachricht ?? "").trim();
+  const text = original.toLocaleLowerCase("de-DE");
   if (text.includes("invalid login")) return "E-Mail-Adresse oder Passwort ist falsch.";
   if (text.includes("email not confirmed")) return "Die E-Mail-Adresse wurde noch nicht bestätigt.";
   if (text.includes("user already registered")) return "Für diese E-Mail-Adresse besteht bereits ein Konto.";
   if (text.includes("password")) return "Das Passwort erfüllt die Anforderungen nicht (mindestens 8 Zeichen).";
-  if (text.includes("row-level security") || text.includes("permission"))
-    return "Für diese Aktion fehlt Ihnen die Berechtigung.";
+  if (text.includes("bereits entnommen"))
+    return "Dieser Schlüssel wurde inzwischen bereits von einer anderen Person entnommen. Die Ansicht wurde aktualisiert.";
+  if (text.includes("bereits zurückgegeben") || text.includes("bereits zurueckgegeben"))
+    return "Dieser Schlüssel wurde inzwischen bereits zurückgegeben. Die Ansicht wurde aktualisiert.";
+  if (text.includes("nicht gefunden")) return "Der Schlüssel wurde nicht gefunden oder inzwischen gelöscht.";
+  if (text.includes("nur administratoren") || text.includes("row-level security") || text.includes("permission"))
+    return "Für diese Aktion fehlt Ihnen die Administrator-Berechtigung.";
+  if (
+    text.includes("schluessel_anlegen") ||
+    text.includes("schluessel_aendern") ||
+    text.includes("schluessel_entnehmen") ||
+    text.includes("schluessel_zurueckgeben") ||
+    text.includes("bestand_importieren") ||
+    (text.includes("column") && text.includes("anhaenger"))
+  )
+    return "Die neue Datenbank-Migration 004 wurde noch nicht ausgeführt. Öffnen Sie Supabase → SQL Editor und führen Sie die Datei supabase/004_anhaenger_und_sicherer_verlauf.sql vollständig aus.";
+  if (text.includes("duplicate key")) return "Dieser Datensatz existiert bereits.";
+  if (text.includes("check constraint")) return "Mindestens ein eingegebener Wert ist ungültig. Bitte prüfen Sie Position, Anzahl und Farben.";
   if (text.includes("fetch") || text.includes("network"))
     return "Keine Verbindung zum Server. Bitte prüfen Sie Ihre Internetverbindung.";
-  return "Es ist ein Fehler aufgetreten. Bitte versuchen Sie es erneut.";
-}
-export function farbText(farbe: string): string {
-  const namen: Record<string, string> = {
-    Blau: "Blau",
-    Rot: "Rot",
-    Grau: "Grau",
-    Weiß: "Weiß",
-    Violett: "Violett",
-    Orange: "Orange",
-    Schwarz: "Schwarz",
-    Gelb: "Gelb",
-    Grün: "Grün",
-  };
-  return namen[farbe] ?? farbe;
-}
-
-export function farbCss(farbe: string): string {
-  const karte: Record<string, string> = {
-    Blau: "bg-blue-500",
-    Rot: "bg-red-500",
-    Grau: "bg-gray-500",
-    Weiß: "bg-white border border-gray-300",
-    Violett: "bg-purple-500",
-    Orange: "bg-orange-500",
-    Schwarz: "bg-black",
-    Gelb: "bg-yellow-400",
-    Grün: "bg-green-500",
-  };
-  return karte[farbe] ?? "bg-gray-400";
+  return original || "Es ist ein Fehler aufgetreten. Bitte versuchen Sie es erneut.";
 }

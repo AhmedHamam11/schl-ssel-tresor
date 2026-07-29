@@ -28,9 +28,10 @@ create table if not exists public.keys (
   anlage               text not null default '',
   beschriftung         text not null default '',
   farbe                text not null default '',
-  beschriftung_farbe   text not null default 'Grau' check (beschriftung_farbe in ('Blau', 'Rot', 'Grau', 'Weiß', 'Violett', 'Orange', 'Schwarz', 'Gelb', 'Grün')),
+  beschriftung_farbe   text check (beschriftung_farbe is null or beschriftung_farbe in ('Blau', 'Rot', 'Grau', 'Weiß', 'Violett', 'Orange', 'Schwarz', 'Gelb', 'Grün')),
+  anhaenger            jsonb not null default '[]'::jsonb check (jsonb_typeof(anhaenger) = 'array'),
   ist_bund             boolean not null default false,
-  schluesselanzahl     integer not null default 1 check (schluesselanzahl >= 0),
+  schluesselanzahl     integer not null default 1 check (schluesselanzahl >= 1),
   kommentar            text not null default '',
   status               text not null default 'verfuegbar' check (status in ('verfuegbar', 'entnommen')),
   besitzer_id          uuid references public.profiles (id) on delete set null,
@@ -59,6 +60,8 @@ create table if not exists public.key_events (
   position         integer not null,
   schluesselnummer text not null default '',
   beschriftung     text not null default '',
+  anlage           text not null default '',
+  anhaenger        jsonb not null default '[]'::jsonb check (jsonb_typeof(anhaenger) = 'array'),
   aktion           text not null check (aktion in ('entnommen', 'zurueckgegeben', 'importiert', 'angelegt', 'geaendert', 'geloescht')),
   benutzer_id      uuid references public.profiles (id) on delete set null,
   benutzer_name    text not null default '',
@@ -143,6 +146,8 @@ begin
        or new.anlage is distinct from old.anlage
        or new.beschriftung is distinct from old.beschriftung
        or new.farbe is distinct from old.farbe
+       or new.beschriftung_farbe is distinct from old.beschriftung_farbe
+       or new.anhaenger is distinct from old.anhaenger
        or new.ist_bund is distinct from old.ist_bund
        or new.schluesselanzahl is distinct from old.schluesselanzahl
        or new.kommentar is distinct from old.kommentar
@@ -178,34 +183,37 @@ drop policy if exists "Schluessel lesen" on public.keys;
 create policy "Schluessel lesen" on public.keys
   for select to authenticated using (true);
 
+-- Kein direkter INSERT/UPDATE/DELETE-Zugriff aus dem Browser.
+-- Migration 004 stellt atomare RPC-Funktionen bereit, die Bestand und
+-- Verlauf in derselben Transaktion aktualisieren.
 drop policy if exists "Schluessel entnehmen und zurueckgeben" on public.keys;
-create policy "Schluessel entnehmen und zurueckgeben" on public.keys
-  for update to authenticated using (true) with check (true);
-
 drop policy if exists "Schluessel anlegen nur Administrator" on public.keys;
-create policy "Schluessel anlegen nur Administrator" on public.keys
-  for insert to authenticated with check (public.ist_admin());
-
 drop policy if exists "Schluessel loeschen nur Administrator" on public.keys;
-create policy "Schluessel loeschen nur Administrator" on public.keys
-  for delete to authenticated using (public.ist_admin());
 
 drop policy if exists "Verlauf lesen" on public.key_events;
 create policy "Verlauf lesen" on public.key_events
   for select to authenticated using (true);
 
 drop policy if exists "Verlauf anfuegen" on public.key_events;
-create policy "Verlauf anfuegen" on public.key_events
-  for insert to authenticated with check (true);
-
--- Kein UPDATE und kein DELETE auf key_events: alte Eintraege
--- koennen dadurch weder geloescht noch ueberschrieben werden.
+-- Verlaufseintraege werden nur von den RPC-Funktionen aus Migration 004 erzeugt.
+-- Dadurch koennen Clients weder falsche Eintraege anlegen noch alte Eintraege
+-- aendern oder loeschen.
 
 -- ------------------------------------------------------------
 -- 8) Echtzeit-Aktualisierung aktivieren
 -- ------------------------------------------------------------
-alter publication supabase_realtime add table public.keys;
-alter publication supabase_realtime add table public.key_events;
+do $$
+begin
+  begin
+    alter publication supabase_realtime add table public.keys;
+  exception when duplicate_object then null;
+  end;
+  begin
+    alter publication supabase_realtime add table public.key_events;
+  exception when duplicate_object then null;
+  end;
+end
+$$;
 
 alter table public.keys replica identity full;
 
@@ -214,10 +222,12 @@ create or replace function public.farb_statistik(von_position integer, bis_posit
 returns table (farbe text, anzahl bigint)
 language sql stable
 as $$
-  select beschriftung_farbe as farbe, count(*) as anzahl
-  from   public.keys
-  where  position >= von_position
-    and  position <= bis_position
-  group by beschriftung_farbe
+  select a ->> 'farbe' as farbe, count(*) as anzahl
+  from public.keys k
+  cross join lateral jsonb_array_elements(k.anhaenger) a
+  where k.position >= von_position
+    and k.position <= bis_position
+    and nullif(a ->> 'farbe', '') is not null
+  group by a ->> 'farbe'
   order by farbe;
 $$;

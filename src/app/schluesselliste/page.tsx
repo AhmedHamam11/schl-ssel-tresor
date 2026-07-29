@@ -3,11 +3,13 @@
 import { useMemo, useState } from "react";
 import SeitenRahmen from "@/components/SeitenRahmen";
 import { Laden, Leer, StatusSchild } from "@/components/Bausteine";
+import AnhaengerAnzeige from "@/components/AnhaengerAnzeige";
 import SchluesselKarte from "@/components/SchluesselKarte";
 import { EntnahmeDialog, RueckgabeDialog } from "@/components/SchluesselDialoge";
 import { SchluesselFormularDialog, SchluesselLoeschenDialog } from "@/components/SchluesselVerwaltenDialog";
 import { useBestand } from "@/components/Datenbestand";
 import { useSitzung } from "@/components/Sitzung";
+import { anhaengerDesSchluessels, anhaengerSuchtext } from "@/lib/anhaenger";
 import { platzStatus } from "@/lib/status";
 import { datumZeit, dauerSeit } from "@/lib/format";
 import type { Schluessel } from "@/lib/typen";
@@ -34,7 +36,7 @@ export default function SchluessellisteSeite() {
   }, [schluessel]);
 
   const gefiltert = useMemo(() => {
-    const begriff = suche.trim().toLowerCase();
+    const begriff = suche.trim().toLocaleLowerCase("de-DE");
     return schluessel.filter((k) => {
       if (filter === "verfuegbar" && k.status !== "verfuegbar") return false;
       if (filter === "entnommen" && k.status !== "entnommen") return false;
@@ -46,11 +48,11 @@ export default function SchluessellisteSeite() {
         k.beschriftung,
         k.anlage,
         k.besitzer_name ?? "",
-        k.farbe,
         k.standort ?? "",
+        anhaengerSuchtext(anhaengerDesSchluessels(k)),
       ]
         .join(" ")
-        .toLowerCase()
+        .toLocaleLowerCase("de-DE")
         .includes(begriff);
     });
   }, [schluessel, suche, filter, teilweisePlaetze]);
@@ -65,7 +67,7 @@ export default function SchluessellisteSeite() {
   return (
     <SeitenRahmen
       titel="Schlüsselliste"
-      beschreibung="Suchen Sie nach Platznummer, Schlüsselnummer, Beschriftung, Anlage oder aktuellem Besitzer."
+      beschreibung="Suchen Sie nach Platznummer, Schlüsselnummer, Anhängertext, Farbe, Anlage oder aktuellem Besitzer."
       aktion={
         istAdmin ? (
           <button
@@ -90,7 +92,7 @@ export default function SchluessellisteSeite() {
                 id="suche"
                 value={suche}
                 onChange={(e) => setSuche(e.target.value)}
-                placeholder="Platznummer, Schlüsselnummer, Beschriftung, Anlage oder Besitzer …"
+                placeholder="Platz, Schlüsselnummer, Anhänger, Farbe, Anlage oder Besitzer …"
                 className="w-full rounded-md border border-tresor-line px-3 py-2.5 text-sm focus:border-tresor-blau focus:outline-none focus-visible:ring-2 focus-visible:ring-tresor-blau/30"
               />
             </div>
@@ -134,14 +136,13 @@ export default function SchluessellisteSeite() {
             </div>
           ) : (
             <div className="overflow-x-auto rounded-lg border border-tresor-line bg-white">
-              <table className="w-full min-w-[1100px] text-sm">
+              <table className="w-full min-w-[1200px] text-sm">
                 <thead className="bg-tresor-bg text-left text-xs uppercase tracking-wide text-tresor-muted">
                   <tr>
                     <th className="px-4 py-3">Platz</th>
                     <th className="px-4 py-3">Schlüsselnummer</th>
-                    <th className="px-4 py-3">Beschriftung</th>
+                    <th className="px-4 py-3">Anhänger</th>
                     <th className="px-4 py-3">Anlage</th>
-                    <th className="px-4 py-3">Farbe</th>
                     <th className="px-4 py-3">Art</th>
                     <th className="px-4 py-3">Anzahl</th>
                     <th className="px-4 py-3">Status</th>
@@ -180,9 +181,10 @@ function Zeile({ schluessel, istAdmin }: { schluessel: Schluessel; istAdmin: boo
     <tr className="hover:bg-tresor-bg/60">
       <td className="px-4 py-3 text-lg font-bold tabular-nums">{schluessel.position}</td>
       <td className="px-4 py-3">{schluessel.schluesselnummer || "—"}</td>
-      <td className="px-4 py-3 font-medium">{schluessel.beschriftung || "—"}</td>
+      <td className="max-w-[22rem] px-4 py-3">
+        <AnhaengerAnzeige anhaenger={anhaengerDesSchluessels(schluessel)} kompakt />
+      </td>
       <td className="px-4 py-3 text-tresor-muted">{schluessel.anlage || "—"}</td>
-      <td className="px-4 py-3 text-tresor-muted">{schluessel.farbe || "—"}</td>
       <td className="px-4 py-3 text-tresor-muted">
         {schluessel.ist_bund ? "Schlüsselbund" : "Einzelschlüssel"}
       </td>
@@ -192,10 +194,10 @@ function Zeile({ schluessel, istAdmin }: { schluessel: Schluessel; istAdmin: boo
       </td>
       <td className="px-4 py-3">{schluessel.besitzer_name ?? "—"}</td>
       <td className="px-4 py-3 text-tresor-muted">{schluessel.standort ?? "—"}</td>
-      <td className="px-4 py-3 whitespace-nowrap text-tresor-muted">
+      <td className="whitespace-nowrap px-4 py-3 text-tresor-muted">
         {datumZeit(schluessel.entnommen_am)}
       </td>
-      <td className="px-4 py-3 whitespace-nowrap text-tresor-muted">
+      <td className="whitespace-nowrap px-4 py-3 text-tresor-muted">
         {entnommen ? dauerSeit(schluessel.entnommen_am) : "—"}
       </td>
       <td className="px-4 py-3 text-right">

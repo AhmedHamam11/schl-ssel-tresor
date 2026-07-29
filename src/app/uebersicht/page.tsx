@@ -7,6 +7,7 @@ import { Karte, Laden, StatusPunkt } from "@/components/Bausteine";
 import { useBestand } from "@/components/Datenbestand";
 import { platzStatus } from "@/lib/status";
 import { datumZeit, dauerText } from "@/lib/format";
+import { anhaengerDesEreignisses } from "@/lib/anhaenger";
 
 export default function UebersichtSeite() {
   const { schluessel, ereignisse, laedt } = useBestand();
@@ -118,7 +119,7 @@ function Liste({
               </span>
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-medium text-tresor-text">
-                  Platz {e.position} · {e.beschriftung || e.schluesselnummer || "Ohne Beschriftung"}
+                  Platz {e.position} · {anhaengerDesEreignisses(e)[0]?.text || e.beschriftung || e.schluesselnummer || "Ohne Beschriftung"}
                 </div>
                 <div className="text-xs text-tresor-muted">
                   {e.benutzer_name}

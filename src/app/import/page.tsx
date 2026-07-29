@@ -3,15 +3,17 @@
 import { useState } from "react";
 import SeitenRahmen from "@/components/SeitenRahmen";
 import { Hinweis } from "@/components/Bausteine";
+import AnhaengerAnzeige from "@/components/AnhaengerAnzeige";
 import { useSitzung } from "@/components/Sitzung";
 import { useBestand } from "@/components/Datenbestand";
 import { leseBestandsdatei, erzeugeVorlage, type ImportZeile } from "@/lib/excel";
+import { bestandImportieren } from "@/lib/schluesselAktionen";
 import { fehlerText } from "@/lib/format";
 
 type Modus = "ergaenzen" | "ersetzen";
 
 export default function ImportSeite() {
-  const { supabase, profil } = useSitzung();
+  const { supabase } = useSitzung();
   const { neuLaden } = useBestand();
   const [dateiname, setDateiname] = useState("");
   const [zeilen, setZeilen] = useState<ImportZeile[]>([]);
@@ -31,7 +33,9 @@ export default function ImportSeite() {
       const puffer = await datei.arrayBuffer();
       const ergebnis = leseBestandsdatei(puffer);
       if (ergebnis.zeilen.length === 0) {
-        setFehler("Die Datei enthält keine Datenzeilen. Prüfen Sie, ob das erste Tabellenblatt die Bestandsliste enthält.");
+        setFehler(
+          "Die Datei enthält keine Datenzeilen. Prüfen Sie, ob das erste Tabellenblatt die Bestandsliste enthält."
+        );
         return;
       }
       setZeilen(ergebnis.zeilen);
@@ -53,53 +57,33 @@ export default function ImportSeite() {
     }
     setLaeuft(true);
     setFehler(null);
+    setErfolg(null);
 
-    if (modus === "ersetzen") {
-      const { error } = await supabase.from("keys").delete().gte("position", 1);
-      if (error) {
-        setLaeuft(false);
-        setFehler(fehlerText(error.message));
-        return;
-      }
+    try {
+      const saetze = gueltige.map((z) => ({
+        position: z.position!,
+        schluesselnummer: z.schluesselnummer,
+        anlage: z.anlage,
+        anhaenger: z.anhaenger,
+        ist_bund: z.ist_bund,
+        schluesselanzahl: z.schluesselanzahl,
+        kommentar: z.kommentar,
+      }));
+
+      const anzahl = await bestandImportieren(supabase, {
+        daten: saetze,
+        ersetzen: modus === "ersetzen",
+        dateiname,
+      });
+      await neuLaden();
+      setZeilen([]);
+      setDateiname("");
+      setErfolg(`${anzahl} Datensätze wurden vollständig importiert.`);
+    } catch (error) {
+      setFehler(fehlerText(error instanceof Error ? error.message : undefined));
+    } finally {
+      setLaeuft(false);
     }
-
-    const saetze = gueltige.map((z) => ({
-      position: z.position!,
-      schluesselnummer: z.schluesselnummer,
-      anlage: z.anlage,
-      beschriftung: z.beschriftung,
-      farbe: z.farbe,
-      ist_bund: z.ist_bund,
-      schluesselanzahl: z.schluesselanzahl,
-      kommentar: z.kommentar,
-      status: "verfuegbar" as const,
-      letzte_aenderung_durch: profil?.name ?? "",
-    }));
-
-    for (let i = 0; i < saetze.length; i += 200) {
-      const { error } = await supabase.from("keys").insert(saetze.slice(i, i + 200));
-      if (error) {
-        setLaeuft(false);
-        setFehler(fehlerText(error.message));
-        return;
-      }
-    }
-
-    await supabase.from("key_events").insert({
-      position: gueltige[0].position!,
-      schluesselnummer: "",
-      anlage: "",
-      beschriftung: `Excel-Import: ${gueltige.length} Datensätze aus ${dateiname}`,
-      aktion: "importiert",
-      benutzer_id: profil?.id ?? null,
-      benutzer_name: profil?.name ?? "",
-    });
-
-    await neuLaden();
-    setLaeuft(false);
-    setZeilen([]);
-    setDateiname("");
-    setErfolg(`${gueltige.length} Datensätze wurden importiert.`);
   }
 
   return (
@@ -123,9 +107,14 @@ export default function ImportSeite() {
         <div className="rounded-lg border border-tresor-line bg-white p-5">
           <h2 className="text-sm font-semibold text-tresor-text">1. Datei auswählen</h2>
           <p className="mt-1 text-sm text-tresor-muted">
+            Mehrere Anhänger gehören in dieselbe Zelle, getrennt durch Semikolon. Format:
+            <span className="font-medium text-tresor-text"> Text|Farbe; Text|Farbe; Text</span>.
+            Ohne „|Farbe“ bleibt der jeweilige Anhänger farblos.
+          </p>
+          <p className="mt-1 text-xs text-tresor-muted">
             Unterstützte Spalten: Schlüssel Position, Schlüsselnummer/n, Anlage/Zugehörigkeit,
-            Beschriftung Schlüsselanhänger, Farbe Schlüsselanhänger, Schlüsselbund?, Schlüsselanzahl,
-            Kommentar. Mehrere Zeilen dürfen dieselbe Schlüsselposition verwenden.
+            Anhänger (Text|Farbe; ...), Schlüsselbund?, Schlüsselanzahl und Kommentar. Die alten
+            Spalten „Beschriftung Schlüsselanhänger“ und „Farbe Schlüsselanhänger“ werden weiterhin erkannt.
           </p>
           <input
             type="file"
@@ -150,21 +139,18 @@ export default function ImportSeite() {
               </div>
               <div className="mt-3 text-xs text-tresor-muted">
                 Erkannte Spalten: {erkannt.join(", ") || "keine"}
-                {unbekannt.length > 0 && (
-                  <> · Nicht übernommen: {unbekannt.join(", ")}</>
-                )}
+                {unbekannt.length > 0 && <> · Nicht übernommen: {unbekannt.join(", ")}</>}
               </div>
 
               <div className="mt-4 max-h-[26rem] overflow-auto rounded-md border border-tresor-line">
-                <table className="w-full min-w-[900px] text-sm">
+                <table className="w-full min-w-[1000px] text-sm">
                   <thead className="sticky top-0 bg-tresor-bg text-left text-xs uppercase tracking-wide text-tresor-muted">
                     <tr>
                       <th className="px-3 py-2">Zeile</th>
                       <th className="px-3 py-2">Position</th>
                       <th className="px-3 py-2">Schlüsselnummer/n</th>
                       <th className="px-3 py-2">Anlage</th>
-                      <th className="px-3 py-2">Beschriftung</th>
-                      <th className="px-3 py-2">Farbe</th>
+                      <th className="px-3 py-2">Anhänger</th>
                       <th className="px-3 py-2">Bund?</th>
                       <th className="px-3 py-2">Anzahl</th>
                       <th className="px-3 py-2">Kommentar</th>
@@ -178,8 +164,9 @@ export default function ImportSeite() {
                         <td className="px-3 py-2 font-bold tabular-nums">{z.position ?? "—"}</td>
                         <td className="px-3 py-2">{z.schluesselnummer || "—"}</td>
                         <td className="px-3 py-2">{z.anlage || "—"}</td>
-                        <td className="px-3 py-2">{z.beschriftung || "—"}</td>
-                        <td className="px-3 py-2">{z.farbe || "—"}</td>
+                        <td className="max-w-[24rem] px-3 py-2">
+                          <AnhaengerAnzeige anhaenger={z.anhaenger} kompakt />
+                        </td>
                         <td className="px-3 py-2">{z.ist_bund ? "Ja" : "Nein"}</td>
                         <td className="px-3 py-2 tabular-nums">{z.schluesselanzahl}</td>
                         <td className="px-3 py-2 text-tresor-muted">{z.kommentar || "—"}</td>
@@ -215,7 +202,7 @@ export default function ImportSeite() {
                     </span>
                   </span>
                 </label>
-                <label className="flex items-start gap-3 rounded-md border border-tresor-line p-3 text-sm">
+                <label className="flex items-start gap-3 rounded-md border border-status-rot/30 p-3 text-sm">
                   <input
                     type="radio"
                     checked={modus === "ersetzen"}
@@ -223,20 +210,28 @@ export default function ImportSeite() {
                     className="mt-1"
                   />
                   <span>
-                    <span className="font-medium">Bestand ersetzen</span>
+                    <span className="font-medium text-status-rot">Bestand vollständig ersetzen</span>
                     <span className="block text-tresor-muted">
-                      Alle vorhandenen Schlüssel werden gelöscht und durch die Datei ersetzt. Der
-                      Änderungsverlauf bleibt erhalten.
+                      Alle vorhandenen Schlüssel werden durch die gültigen Zeilen dieser Datei ersetzt.
+                      Die Datenbank führt Löschen und Einfügen gemeinsam aus: Bei einem Fehler bleibt der alte Bestand erhalten.
                     </span>
                   </span>
                 </label>
               </fieldset>
+
+              {fehlerhafte.length > 0 && (
+                <Hinweis
+                  art="info"
+                  text={`${fehlerhafte.length} fehlerhafte Zeilen werden nicht importiert. Korrigieren Sie die Datei, wenn diese Datensätze benötigt werden.`}
+                />
+              )}
+
               <button
                 onClick={importieren}
                 disabled={laeuft || gueltige.length === 0}
-                className="mt-4 rounded-md bg-tresor-blau px-5 py-3 text-sm font-semibold text-white hover:brightness-110 disabled:opacity-60"
+                className="mt-4 w-full rounded-md bg-tresor-blau px-4 py-3 text-sm font-semibold text-white hover:brightness-110 disabled:opacity-60"
               >
-                {laeuft ? "Import läuft …" : `${gueltige.length} Datensätze importieren`}
+                {laeuft ? "Import wird ausgeführt …" : `${gueltige.length} gültige Datensätze importieren`}
               </button>
             </div>
           </>

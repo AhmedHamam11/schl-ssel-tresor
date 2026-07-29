@@ -1,4 +1,4 @@
-import { createServerClient } from "@supabase/ssr";
+import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
 export function supabaseServer() {
@@ -9,13 +9,11 @@ export function supabaseServer() {
     {
       cookies: {
         getAll: () => cookieStore.getAll(),
-        setAll: (liste: { name: string; value: string; options: any }[]) => {
+        setAll: (liste: { name: string; value: string; options: CookieOptions }[]) => {
           try {
-            liste.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
-            );
+            liste.forEach(({ name, value, options }) => cookieStore.set(name, value, options));
           } catch {
-            // In Server Components ist Setzen nicht moeglich - unkritisch.
+            // In Server Components ist das Setzen nicht immer möglich; Middleware/Route Handler übernehmen es.
           }
         },
       },

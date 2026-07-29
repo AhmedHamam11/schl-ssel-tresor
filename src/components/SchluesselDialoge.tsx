@@ -2,8 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { useSitzung } from "./Sitzung";
+import { useBestand } from "./Datenbestand";
 import { Hinweis } from "./Bausteine";
 import { fehlerText, datumZeit } from "@/lib/format";
+import { primaereBeschriftung } from "@/lib/anhaenger";
+import { schluesselEntnehmen, schluesselZurueckgeben } from "@/lib/schluesselAktionen";
 import type { Schluessel } from "@/lib/typen";
 
 function Rahmen({
@@ -51,6 +54,7 @@ export function EntnahmeDialog({
   schliessen: () => void;
 }) {
   const { supabase, profil } = useSitzung();
+  const { neuLaden } = useBestand();
   const [person, setPerson] = useState(profil?.name ?? "");
   const [standort, setStandort] = useState("");
   const [zweck, setZweck] = useState("");
@@ -65,49 +69,27 @@ export function EntnahmeDialog({
     setLaeuft(true);
     setFehler(null);
 
-    const jetzt = new Date().toISOString();
-    const { error } = await supabase
-      .from("keys")
-      .update({
-        status: "entnommen",
-        besitzer_id: profil?.id ?? null,
-        besitzer_name: person.trim(),
+    try {
+      await schluesselEntnehmen(supabase, {
+        id: schluessel.id,
+        besitzerName: person.trim(),
         standort: standort.trim(),
         verwendungszweck: zweck.trim() || null,
-        entnommen_am: jetzt,
-        rueckgabe_geplant: rueckgabe ? new Date(rueckgabe).toISOString() : null,
-        letzte_aenderung_durch: profil?.name ?? "",
-      })
-      .eq("id", schluessel.id)
-      .eq("status", "verfuegbar");
-
-    if (error) {
+        rueckgabeGeplant: rueckgabe ? new Date(rueckgabe).toISOString() : null,
+      });
+      await neuLaden();
+      schliessen();
+    } catch (error) {
+      setFehler(fehlerText(error instanceof Error ? error.message : undefined));
+    } finally {
       setLaeuft(false);
-      return setFehler(fehlerText(error.message));
     }
-
-    await supabase.from("key_events").insert({
-      key_id: schluessel.id,
-      position: schluessel.position,
-      schluesselnummer: schluessel.schluesselnummer,
-      beschriftung: schluessel.beschriftung,
-      anlage: schluessel.anlage,
-      aktion: "entnommen",
-      benutzer_id: profil?.id ?? null,
-      benutzer_name: person.trim(),
-      standort: standort.trim(),
-      verwendungszweck: zweck.trim() || null,
-      zeitpunkt: jetzt,
-    });
-
-    setLaeuft(false);
-    schliessen();
   }
 
   return (
     <Rahmen
       titel="Schlüssel entnehmen"
-      untertitel={`Platz ${schluessel.position} · ${schluessel.beschriftung || schluessel.schluesselnummer}`}
+      untertitel={`Platz ${schluessel.position} · ${primaereBeschriftung(schluessel)}`}
       schliessen={schliessen}
     >
       <form onSubmit={absenden} className="grid gap-4">
@@ -172,6 +154,7 @@ export function RueckgabeDialog({
   schliessen: () => void;
 }) {
   const { supabase, profil } = useSitzung();
+  const { neuLaden } = useBestand();
   const [person, setPerson] = useState(profil?.name ?? "");
   const [fehler, setFehler] = useState<string | null>(null);
   const [laeuft, setLaeuft] = useState(false);
@@ -182,47 +165,18 @@ export function RueckgabeDialog({
     setLaeuft(true);
     setFehler(null);
 
-    const jetzt = new Date().toISOString();
-    const dauer = schluessel.entnommen_am
-      ? Math.floor((Date.now() - new Date(schluessel.entnommen_am).getTime()) / 1000)
-      : null;
-
-    const { error } = await supabase
-      .from("keys")
-      .update({
-        status: "verfuegbar",
-        besitzer_id: null,
-        besitzer_name: null,
-        standort: null,
-        verwendungszweck: null,
-        entnommen_am: null,
-        rueckgabe_geplant: null,
-        zuletzt_zurueck_am: jetzt,
-        letzte_aenderung_durch: profil?.name ?? "",
-      })
-      .eq("id", schluessel.id);
-
-    if (error) {
+    try {
+      await schluesselZurueckgeben(supabase, {
+        id: schluessel.id,
+        rueckgeberName: person.trim(),
+      });
+      await neuLaden();
+      schliessen();
+    } catch (error) {
+      setFehler(fehlerText(error instanceof Error ? error.message : undefined));
+    } finally {
       setLaeuft(false);
-      return setFehler(fehlerText(error.message));
     }
-
-    await supabase.from("key_events").insert({
-      key_id: schluessel.id,
-      position: schluessel.position,
-      schluesselnummer: schluessel.schluesselnummer,
-      beschriftung: schluessel.beschriftung,
-      anlage: schluessel.anlage,
-      aktion: "zurueckgegeben",
-      benutzer_id: profil?.id ?? null,
-      benutzer_name: person.trim(),
-      standort: schluessel.standort,
-      dauer_sekunden: dauer,
-      zeitpunkt: jetzt,
-    });
-
-    setLaeuft(false);
-    schliessen();
   }
 
   return (
@@ -237,7 +191,7 @@ export function RueckgabeDialog({
           <div className="flex justify-between gap-4 py-1">
             <dt className="text-tresor-muted">Schlüssel</dt>
             <dd className="text-right font-medium">
-              {schluessel.beschriftung || schluessel.schluesselnummer}
+              {primaereBeschriftung(schluessel)}
             </dd>
           </div>
           <div className="flex justify-between gap-4 py-1">

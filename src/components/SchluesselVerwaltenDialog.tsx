@@ -1,10 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSitzung } from "./Sitzung";
+import { useBestand } from "./Datenbestand";
 import { Hinweis } from "./Bausteine";
 import { fehlerText } from "@/lib/format";
-import type { Schluessel, BeschriftungFarbe } from "@/lib/typen";
+import {
+  BESCHRIFTUNGSFARBEN,
+  anhaengerDesSchluessels,
+  farbStil,
+} from "@/lib/anhaenger";
+import {
+  schluesselAendern,
+  schluesselAnlegen,
+  schluesselLoeschen,
+} from "@/lib/schluesselAktionen";
+import type { BeschriftungFarbe, Schluessel } from "@/lib/typen";
 
 function Rahmen({
   titel,
@@ -19,6 +30,12 @@ function Rahmen({
   breit?: boolean;
   children: React.ReactNode;
 }) {
+  useEffect(() => {
+    const taste = (e: KeyboardEvent) => e.key === "Escape" && schliessen();
+    window.addEventListener("keydown", taste);
+    return () => window.removeEventListener("keydown", taste);
+  }, [schliessen]);
+
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4">
       <div
@@ -29,8 +46,20 @@ function Rahmen({
           breit ? "max-w-2xl" : "max-w-lg"
         }`}
       >
-        <h2 className="text-lg font-bold text-tresor-text">{titel}</h2>
-        <p className="mt-1 text-sm text-tresor-muted">{untertitel}</p>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-bold text-tresor-text">{titel}</h2>
+            <p className="mt-1 text-sm text-tresor-muted">{untertitel}</p>
+          </div>
+          <button
+            type="button"
+            onClick={schliessen}
+            aria-label="Dialog schließen"
+            className="rounded-md border border-tresor-line px-2.5 py-1.5 text-sm text-tresor-muted hover:bg-tresor-bg"
+          >
+            ✕
+          </button>
+        </div>
         <div className="mt-5">{children}</div>
       </div>
     </div>
@@ -41,46 +70,28 @@ const eingabe =
   "mt-1 w-full rounded-md border border-tresor-line bg-white px-3 py-2.5 text-sm text-tresor-text placeholder:text-tresor-muted focus:border-tresor-blau focus:outline-none focus-visible:ring-2 focus-visible:ring-tresor-blau/30";
 const beschriftungsKlasse = "block text-sm font-medium text-tresor-text";
 
-const BESCHRIFTUNGSFARBEN: readonly BeschriftungFarbe[] = [
-  "Blau",
-  "Rot",
-  "Grau",
-  "Weiß",
-  "Violett",
-  "Orange",
-  "Schwarz",
-  "Gelb",
-  "Grün",
-];
+type FormularFarbe = BeschriftungFarbe | "";
 
-const FARBCODES: Record<BeschriftungFarbe, string> = {
-  Blau: "#2563EB",
-  Rot: "#DC2626",
-  Grau: "#6B7280",
-  Weiß: "#FFFFFF",
-  Violett: "#7C3AED",
-  Orange: "#F97316",
-  Schwarz: "#111827",
-  Gelb: "#EAB308",
-  Grün: "#16A34A",
-};
-
-function istBeschriftungFarbe(wert: unknown): wert is BeschriftungFarbe {
-  return (
-    typeof wert === "string" &&
-    (BESCHRIFTUNGSFARBEN as readonly string[]).includes(wert)
-  );
+interface FormularAnhaenger {
+  id: string;
+  text: string;
+  farbe: FormularFarbe;
 }
 
 interface Formular {
   position: string;
   schluesselnummer: string;
   anlage: string;
-  beschriftung: string;
-  beschriftung_farbe: BeschriftungFarbe;
+  anhaenger: FormularAnhaenger[];
   ist_bund: boolean;
   schluesselanzahl: string;
   kommentar: string;
+}
+
+let anhaengerZaehler = 0;
+function formularAnhaenger(text = "", farbe: FormularFarbe = ""): FormularAnhaenger {
+  anhaengerZaehler += 1;
+  return { id: `anhaenger-${anhaengerZaehler}`, text, farbe };
 }
 
 function leeresFormular(vorgabePosition?: number): Formular {
@@ -88,8 +99,7 @@ function leeresFormular(vorgabePosition?: number): Formular {
     position: vorgabePosition ? String(vorgabePosition) : "",
     schluesselnummer: "",
     anlage: "",
-    beschriftung: "",
-    beschriftung_farbe: "Grau",
+    anhaenger: [formularAnhaenger()],
     ist_bund: false,
     schluesselanzahl: "1",
     kommentar: "",
@@ -97,25 +107,21 @@ function leeresFormular(vorgabePosition?: number): Formular {
 }
 
 function ausSchluessel(k: Schluessel): Formular {
-  const gespeicherteFarbe = istBeschriftungFarbe(k.beschriftung_farbe)
-    ? k.beschriftung_farbe
-    : istBeschriftungFarbe(k.farbe)
-      ? k.farbe
-      : "Grau";
-
+  const anhaenger = anhaengerDesSchluessels(k).map((a) =>
+    formularAnhaenger(a.text, a.farbe ?? "")
+  );
   return {
     position: String(k.position),
     schluesselnummer: k.schluesselnummer,
     anlage: k.anlage,
-    beschriftung: k.beschriftung,
+    anhaenger: anhaenger.length ? anhaenger : [formularAnhaenger()],
     ist_bund: k.ist_bund,
     schluesselanzahl: String(k.schluesselanzahl),
-    beschriftung_farbe: gespeicherteFarbe,
     kommentar: k.kommentar,
   };
 }
 
-/** Formular zum Anlegen oder Bearbeiten eines Schluessels. Nur fuer Administratoren sichtbar. */
+/** Formular zum Anlegen oder Bearbeiten eines Schlüssels. Nur für Administratoren sichtbar. */
 export function SchluesselFormularDialog({
   schluessel,
   vorgabePosition,
@@ -125,7 +131,8 @@ export function SchluesselFormularDialog({
   vorgabePosition?: number;
   schliessen: () => void;
 }) {
-  const { supabase, profil } = useSitzung();
+  const { supabase } = useSitzung();
+  const { neuLaden } = useBestand();
   const bearbeiten = Boolean(schluessel);
   const [feld, setFeld] = useState<Formular>(
     schluessel ? ausSchluessel(schluessel) : leeresFormular(vorgabePosition)
@@ -133,8 +140,37 @@ export function SchluesselFormularDialog({
   const [fehler, setFehler] = useState<string | null>(null);
   const [laeuft, setLaeuft] = useState(false);
 
-  function setzen<K extends keyof Formular>(name: K, wert: Formular[K]) {
+  const titelText = useMemo(() => {
+    const erster = feld.anhaenger.find((a) => a.text.trim());
+    return erster?.text || feld.schluesselnummer || "Ohne Beschriftung";
+  }, [feld.anhaenger, feld.schluesselnummer]);
+
+  function setzen<K extends Exclude<keyof Formular, "anhaenger">>(name: K, wert: Formular[K]) {
     setFeld((alt) => ({ ...alt, [name]: wert }));
+  }
+
+  function anhaengerAendern(
+    id: string,
+    name: "text" | "farbe",
+    wert: string
+  ) {
+    setFeld((alt) => ({
+      ...alt,
+      anhaenger: alt.anhaenger.map((a) =>
+        a.id === id ? { ...a, [name]: wert as FormularAnhaenger[typeof name] } : a
+      ),
+    }));
+  }
+
+  function anhaengerHinzufuegen() {
+    setFeld((alt) => ({ ...alt, anhaenger: [...alt.anhaenger, formularAnhaenger()] }));
+  }
+
+  function anhaengerEntfernen(id: string) {
+    setFeld((alt) => {
+      const rest = alt.anhaenger.filter((a) => a.id !== id);
+      return { ...alt, anhaenger: rest.length ? rest : [formularAnhaenger()] };
+    });
   }
 
   async function absenden(e: React.FormEvent) {
@@ -146,10 +182,16 @@ export function SchluesselFormularDialog({
       setFehler("Bitte wählen Sie einen Tresorplatz zwischen 1 und 500.");
       return;
     }
-    if (!feld.schluesselnummer.trim() && !feld.beschriftung.trim()) {
-      setFehler("Bitte geben Sie mindestens eine Schlüsselnummer oder eine Beschriftung an.");
+
+    const anhaenger = feld.anhaenger
+      .map((a) => ({ text: a.text.trim(), farbe: a.farbe || null }))
+      .filter((a) => a.text);
+
+    if (!feld.schluesselnummer.trim() && anhaenger.length === 0) {
+      setFehler("Bitte geben Sie mindestens eine Schlüsselnummer oder einen Anhängertext an.");
       return;
     }
+
     const anzahl = Number(feld.schluesselanzahl);
     if (!Number.isInteger(anzahl) || anzahl < 1) {
       setFehler("Die Schlüsselanzahl muss eine ganze Zahl ab 1 sein.");
@@ -157,60 +199,30 @@ export function SchluesselFormularDialog({
     }
 
     setLaeuft(true);
-
-    const satz = {
-      position,
-      schluesselnummer: feld.schluesselnummer.trim(),
-      anlage: feld.anlage.trim(),
-      beschriftung: feld.beschriftung.trim(),
-      beschriftung_farbe: feld.beschriftung_farbe,
-      // Übergangsweise synchron halten, bis alle übrigen Komponenten
-      // ausschließlich beschriftung_farbe verwenden.
-      farbe: feld.beschriftung_farbe,
-      ist_bund: feld.ist_bund,
-      schluesselanzahl: anzahl,
-      kommentar: feld.kommentar.trim(),
-      letzte_aenderung_durch: profil?.name ?? "",
-    };
-
-    if (bearbeiten && schluessel) {
-      const { error } = await supabase.from("keys").update(satz).eq("id", schluessel.id);
-      if (error) {
-        setLaeuft(false);
-        setFehler(fehlerText(error.message));
-        return;
-      }
-      await supabase.from("key_events").insert({
-        key_id: schluessel.id,
+    try {
+      const daten = {
         position,
-        schluesselnummer: satz.schluesselnummer,
-        beschriftung: satz.beschriftung,
-        anlage: satz.anlage,
-        aktion: "geaendert",
-        benutzer_id: profil?.id ?? null,
-        benutzer_name: profil?.name ?? "",
-      });
-    } else {
-      const { data, error } = await supabase.from("keys").insert(satz).select("id").single();
-      if (error) {
-        setLaeuft(false);
-        setFehler(fehlerText(error.message));
-        return;
+        schluesselnummer: feld.schluesselnummer.trim(),
+        anlage: feld.anlage.trim(),
+        anhaenger,
+        ist_bund: feld.ist_bund,
+        schluesselanzahl: anzahl,
+        kommentar: feld.kommentar.trim(),
+      };
+
+      if (bearbeiten && schluessel) {
+        await schluesselAendern(supabase, schluessel.id, daten);
+      } else {
+        await schluesselAnlegen(supabase, daten);
       }
-      await supabase.from("key_events").insert({
-        key_id: data?.id ?? null,
-        position,
-        schluesselnummer: satz.schluesselnummer,
-        beschriftung: satz.beschriftung,
-        anlage: satz.anlage,
-        aktion: "angelegt",
-        benutzer_id: profil?.id ?? null,
-        benutzer_name: profil?.name ?? "",
-      });
+
+      await neuLaden();
+      schliessen();
+    } catch (error) {
+      setFehler(fehlerText(error instanceof Error ? error.message : undefined));
+    } finally {
+      setLaeuft(false);
     }
-
-    setLaeuft(false);
-    schliessen();
   }
 
   return (
@@ -218,7 +230,7 @@ export function SchluesselFormularDialog({
       titel={bearbeiten ? "Schlüssel bearbeiten" : "Schlüssel hinzufügen"}
       untertitel={
         bearbeiten
-          ? `Platz ${schluessel!.position} · ${schluessel!.beschriftung || schluessel!.schluesselnummer}`
+          ? `Platz ${schluessel!.position} · ${titelText}`
           : "Legen Sie einen neuen Einzelschlüssel oder Schlüsselbund im Tresor an."
       }
       schliessen={schliessen}
@@ -269,48 +281,121 @@ export function SchluesselFormularDialog({
           />
         </div>
 
-        <div>
-          <label htmlFor="sv-beschriftung" className={beschriftungsKlasse}>
-            Beschriftung des Schlüsselanhängers
-          </label>
-          <input
-            id="sv-beschriftung"
-            className={eingabe}
-            value={feld.beschriftung}
-            onChange={(e) => setzen("beschriftung", e.target.value)}
-          />
-        </div>
+        <fieldset className="rounded-lg border border-tresor-line bg-tresor-bg/40 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold text-tresor-text">Schlüsselanhänger</div>
+              <p className="mt-1 text-xs text-tresor-muted">
+                Jeder Anhänger besitzt einen eigenen Text und optional eine eigene Farbe.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={anhaengerHinzufuegen}
+              className="rounded-md border border-tresor-blau bg-white px-3 py-2 text-xs font-semibold text-tresor-blau hover:bg-tresor-blau/5"
+            >
+              Weiteren Anhänger hinzufügen
+            </button>
+          </div>
+
+          <div className="mt-4 grid gap-3">
+            {feld.anhaenger.map((a, index) => {
+              const stil = farbStil(a.farbe || null);
+              return (
+                <div
+                  key={a.id}
+                  className="grid gap-3 rounded-md border border-tresor-line bg-white p-3 sm:grid-cols-[minmax(0,1fr)_13rem_auto] sm:items-end"
+                >
+                  <div>
+                    <label htmlFor={`anhaenger-text-${a.id}`} className={beschriftungsKlasse}>
+                      Text Anhänger {index + 1}
+                    </label>
+                    <input
+                      id={`anhaenger-text-${a.id}`}
+                      className={eingabe}
+                      value={a.text}
+                      onChange={(e) => anhaengerAendern(a.id, "text", e.target.value)}
+                      placeholder="z. B. Tor Nord"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor={`anhaenger-farbe-${a.id}`} className={beschriftungsKlasse}>
+                      Farbe
+                    </label>
+                    <div className="flex items-center gap-2">
+                      {a.farbe && (
+                        <span
+                          className="mt-1 h-5 w-5 shrink-0 rounded-full border"
+                          style={{ backgroundColor: stil.hintergrund, borderColor: stil.rand }}
+                          aria-hidden
+                        />
+                      )}
+                      <select
+                        id={`anhaenger-farbe-${a.id}`}
+                        className={eingabe}
+                        value={a.farbe}
+                        onChange={(e) => anhaengerAendern(a.id, "farbe", e.target.value)}
+                      >
+                        <option value="">Keine Farbe ausgewählt</option>
+                        {BESCHRIFTUNGSFARBEN.map((farbe) => (
+                          <option key={farbe} value={farbe}>
+                            {farbe}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => anhaengerEntfernen(a.id)}
+                    className="rounded-md border border-status-rot/30 px-3 py-2.5 text-xs font-semibold text-status-rot hover:bg-status-rot/5"
+                    aria-label={`Anhänger ${index + 1} entfernen`}
+                  >
+                    Entfernen
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </fieldset>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <label htmlFor="sv-beschriftung-farbe" className={beschriftungsKlasse}>
-              Farbe des Schlüsselanhängers
-            </label>
-            <div className="mt-1 flex items-center gap-3">
-              <span
-                aria-hidden="true"
-                className="h-6 w-6 shrink-0 rounded-full border border-tresor-line"
-                style={{ backgroundColor: FARBCODES[feld.beschriftung_farbe] }}
-              />
-              <select
-                id="sv-beschriftung-farbe"
-                className={`${eingabe} mt-0`}
-                value={feld.beschriftung_farbe}
-                onChange={(e) =>
-                  setzen(
-                    "beschriftung_farbe",
-                    e.target.value as BeschriftungFarbe
-                  )
-                }
+          <fieldset>
+            <legend className={beschriftungsKlasse}>Art</legend>
+            <div className="mt-1 grid grid-cols-2 gap-2">
+              <label
+                className={`flex items-center justify-center rounded-md border px-3 py-2.5 text-sm font-medium ${
+                  !feld.ist_bund
+                    ? "border-tresor-blau bg-tresor-blau/5 text-tresor-blau"
+                    : "border-tresor-line text-tresor-text"
+                }`}
               >
-                {BESCHRIFTUNGSFARBEN.map((farbe) => (
-                  <option key={farbe} value={farbe}>
-                    {farbe}
-                  </option>
-                ))}
-              </select>
+                <input
+                  type="radio"
+                  className="sr-only"
+                  checked={!feld.ist_bund}
+                  onChange={() => setzen("ist_bund", false)}
+                />
+                Einzelschlüssel
+              </label>
+              <label
+                className={`flex items-center justify-center rounded-md border px-3 py-2.5 text-sm font-medium ${
+                  feld.ist_bund
+                    ? "border-tresor-blau bg-tresor-blau/5 text-tresor-blau"
+                    : "border-tresor-line text-tresor-text"
+                }`}
+              >
+                <input
+                  type="radio"
+                  className="sr-only"
+                  checked={feld.ist_bund}
+                  onChange={() => setzen("ist_bund", true)}
+                />
+                Schlüsselbund
+              </label>
             </div>
-          </div>
+          </fieldset>
+
           <div>
             <label htmlFor="sv-anzahl" className={beschriftungsKlasse}>
               Schlüsselanzahl
@@ -325,42 +410,6 @@ export function SchluesselFormularDialog({
             />
           </div>
         </div>
-
-        <fieldset>
-          <legend className={beschriftungsKlasse}>Art</legend>
-          <div className="mt-1 grid grid-cols-2 gap-2">
-            <label
-              className={`flex items-center justify-center gap-2 rounded-md border px-3 py-2.5 text-sm font-medium ${
-                !feld.ist_bund
-                  ? "border-tresor-blau bg-tresor-blau/5 text-tresor-blau"
-                  : "border-tresor-line text-tresor-text"
-              }`}
-            >
-              <input
-                type="radio"
-                className="sr-only"
-                checked={!feld.ist_bund}
-                onChange={() => setzen("ist_bund", false)}
-              />
-              Einzelschlüssel
-            </label>
-            <label
-              className={`flex items-center justify-center gap-2 rounded-md border px-3 py-2.5 text-sm font-medium ${
-                feld.ist_bund
-                  ? "border-tresor-blau bg-tresor-blau/5 text-tresor-blau"
-                  : "border-tresor-line text-tresor-text"
-              }`}
-            >
-              <input
-                type="radio"
-                className="sr-only"
-                checked={feld.ist_bund}
-                onChange={() => setzen("ist_bund", true)}
-              />
-              Schlüsselbund
-            </label>
-          </div>
-        </fieldset>
 
         <div>
           <label htmlFor="sv-kommentar" className={beschriftungsKlasse}>
@@ -391,8 +440,8 @@ export function SchluesselFormularDialog({
             {laeuft
               ? "Wird gespeichert …"
               : bearbeiten
-              ? "Änderungen speichern"
-              : "Schlüssel anlegen"}
+                ? "Änderungen speichern"
+                : "Schlüssel anlegen"}
           </button>
         </div>
       </form>
@@ -400,7 +449,7 @@ export function SchluesselFormularDialog({
   );
 }
 
-/** Bestätigungsdialog vor dem Löschen eines Schluessels. Nur fuer Administratoren sichtbar. */
+/** Bestätigungsdialog vor dem Löschen eines Schlüssels. Nur für Administratoren sichtbar. */
 export function SchluesselLoeschenDialog({
   schluessel,
   schliessen,
@@ -408,38 +457,23 @@ export function SchluesselLoeschenDialog({
   schluessel: Schluessel;
   schliessen: () => void;
 }) {
-  const { supabase, profil } = useSitzung();
+  const { supabase } = useSitzung();
+  const { neuLaden } = useBestand();
   const [fehler, setFehler] = useState<string | null>(null);
   const [laeuft, setLaeuft] = useState(false);
 
   async function loeschen() {
     setLaeuft(true);
     setFehler(null);
-
-    // Zuerst loeschen, danach den Verlaufseintrag schreiben. So entsteht
-    // niemals eine E-Mail zu einer Loeschung, die gar nicht stattgefunden hat.
-    const { error } = await supabase.from("keys").delete().eq("id", schluessel.id);
-    if (error) {
+    try {
+      await schluesselLoeschen(supabase, schluessel.id);
+      await neuLaden();
+      schliessen();
+    } catch (error) {
+      setFehler(fehlerText(error instanceof Error ? error.message : undefined));
+    } finally {
       setLaeuft(false);
-      setFehler(fehlerText(error.message));
-      return;
     }
-
-    // key_id bleibt leer: Der Schluessel existiert nicht mehr. Alle fuer die
-    // E-Mail noetigen Angaben stehen im Verlaufseintrag selbst.
-    await supabase.from("key_events").insert({
-      key_id: null,
-      position: schluessel.position,
-      schluesselnummer: schluessel.schluesselnummer,
-      beschriftung: schluessel.beschriftung,
-      anlage: schluessel.anlage,
-      aktion: "geloescht",
-      benutzer_id: profil?.id ?? null,
-      benutzer_name: profil?.name ?? "",
-    });
-
-    setLaeuft(false);
-    schliessen();
   }
 
   return (
@@ -461,8 +495,10 @@ export function SchluesselLoeschenDialog({
             </div>
             <div className="flex justify-between gap-3">
               <dt className="text-tresor-muted">Beschriftung</dt>
-              <dd className="font-semibold text-tresor-text">
-                {schluessel.beschriftung || schluessel.schluesselnummer || "Ohne Beschriftung"}
+              <dd className="text-right font-semibold text-tresor-text">
+                {anhaengerDesSchluessels(schluessel).map((a) => a.text).join(", ") ||
+                  schluessel.schluesselnummer ||
+                  "Ohne Beschriftung"}
               </dd>
             </div>
             {schluessel.status === "entnommen" && (
