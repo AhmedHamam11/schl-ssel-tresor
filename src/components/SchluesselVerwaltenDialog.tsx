@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useSitzung } from "./Sitzung";
 import { Hinweis } from "./Bausteine";
 import { fehlerText } from "@/lib/format";
-import type { Schluessel } from "@/lib/typen";
+import type { Schluessel, BeschriftungFarbe } from "@/lib/typen";
 
 function Rahmen({
   titel,
@@ -47,6 +47,7 @@ interface Formular {
   anlage: string;
   beschriftung: string;
   farbe: string;
+  beschriftung_farbe: BeschriftungFarbe;
   ist_bund: boolean;
   schluesselanzahl: string;
   kommentar: string;
@@ -59,6 +60,7 @@ function leeresFormular(vorgabePosition?: number): Formular {
     anlage: "",
     beschriftung: "",
     farbe: "",
+    beschriftung_farbe: "Grau",
     ist_bund: false,
     schluesselanzahl: "1",
     kommentar: "",

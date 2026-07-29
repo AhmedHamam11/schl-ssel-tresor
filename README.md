@@ -216,3 +216,26 @@ Für die Test-E-Mail muss `WEBHOOK_SECRET` zusätzlich in `.env.local` der Web-A
   `notification_log` wird vor dem Versand geschrieben, zusätzlich sendet die Funktion
   die Event-ID als `Idempotency-Key` an Resend.
 - Import und Bearbeitung lösen bewusst keine E-Mail aus.
+
+## Beschriftungsfarben und Farb-Statistik
+
+Ab Migration 003 verfügt jeder Schlüssel über eine **Beschriftungsfarbe**
+(Blau, Rot, Grau, Weiß, Violett, Orange, Schwarz, Gelb, Grün).
+
+### Wo wird die Farbe festgelegt?
+- **Beim Anlegen/Bearbeiten** eines Schlüssels: Administratoren wählen die
+  Beschriftungsfarbe im Dropdown aus. Ein farbiger Kreis zeigt die aktuelle Auswahl.
+- **Beim Excel-Import**: Alle importierten Schlüssel erhalten vorerst "Grau" und
+  können anschließend einzeln angepasst werden.
+
+### Wo wird die Farbe angezeigt?
+- **Schlüsselkarte**: Neben der Beschriftung erscheint ein farbiger Badge mit dem
+  Farbnamen.
+- **Tresor-Seite**: Für jeden Bereich (Tab 1–50, 51–100, usw.) wird oberhalb der
+  Plätze eine Statistik eingeblendet: wie viele Schlüssel mit welcher Beschriftungsfarbe
+  in diesem Bereich liegen. So sehen Sie auf einen Blick die Farbverteilung.
+
+### Technische Umsetzung
+- **Datenbank**: `beschriftung_farbe text not null default 'Grau'` mit CHECK-Constraint
+- **Funktion**: `public.farb_statistik(von, bis)` liefert die Aggregation
+- **Frontend**: Echtzeit-Berechnung pro Bereich mit `useEffect`

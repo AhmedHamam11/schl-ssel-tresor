@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import SeitenRahmen from "@/components/SeitenRahmen";
 import { Laden, StatusPunkt, StatusSchild } from "@/components/Bausteine";
 import SchluesselKarte from "@/components/SchluesselKarte";
@@ -8,7 +8,8 @@ import { SchluesselFormularDialog } from "@/components/SchluesselVerwaltenDialog
 import { useBestand } from "@/components/Datenbestand";
 import { useSitzung } from "@/components/Sitzung";
 import { platzStatus, statusFarbe } from "@/lib/status";
-import type { PlatzStatus, Schluessel } from "@/lib/typen";
+import { farbText, farbCss } from "@/lib/format";
+import type { PlatzStatus, Schluessel, FarbStatistik } from "@/lib/typen";
 
 const BEREICHE = Array.from({ length: 10 }, (_, i) => ({
   von: i * 50 + 1,
@@ -22,6 +23,7 @@ export default function TresorSeite() {
   const [bereich, setBereich] = useState(0);
   const [platz, setPlatz] = useState<number | null>(null);
   const [nurBelegte, setNurBelegte] = useState(false);
+  const [farbStats, setFarbStats] = useState<FarbStatistik[]>([]);
   const [neuAnlegen, setNeuAnlegen] = useState<number | undefined>(undefined);
   const [dialogOffen, setDialogOffen] = useState(false);
 

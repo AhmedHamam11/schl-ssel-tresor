@@ -61,3 +61,32 @@ export function fehlerText(nachricht: string | undefined): string {
     return "Keine Verbindung zum Server. Bitte prüfen Sie Ihre Internetverbindung.";
   return "Es ist ein Fehler aufgetreten. Bitte versuchen Sie es erneut.";
 }
+export function farbText(farbe: string): string {
+  const namen: Record<string, string> = {
+    Blau: "Blau",
+    Rot: "Rot",
+    Grau: "Grau",
+    Weiß: "Weiß",
+    Violett: "Violett",
+    Orange: "Orange",
+    Schwarz: "Schwarz",
+    Gelb: "Gelb",
+    Grün: "Grün",
+  };
+  return namen[farbe] ?? farbe;
+}
+
+export function farbCss(farbe: string): string {
+  const karte: Record<string, string> = {
+    Blau: "bg-blue-500",
+    Rot: "bg-red-500",
+    Grau: "bg-gray-500",
+    Weiß: "bg-white border border-gray-300",
+    Violett: "bg-purple-500",
+    Orange: "bg-orange-500",
+    Schwarz: "bg-black",
+    Gelb: "bg-yellow-400",
+    Grün: "bg-green-500",
+  };
+  return karte[farbe] ?? "bg-gray-400";
+}

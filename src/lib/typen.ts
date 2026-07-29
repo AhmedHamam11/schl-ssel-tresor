@@ -17,6 +17,7 @@ export interface Schluessel {
   anlage: string;
   beschriftung: string;
   farbe: string;
+  beschriftung_farbe: BeschriftungFarbe;
   ist_bund: boolean;
   schluesselanzahl: number;
   kommentar: string;
@@ -32,6 +33,17 @@ export interface Schluessel {
   erstellt_am: string;
   geaendert_am: string;
 }
+
+export type BeschriftungFarbe =
+  | "Blau"
+  | "Rot"
+  | "Grau"
+  | "Weiß"
+  | "Violett"
+  | "Orange"
+  | "Schwarz"
+  | "Gelb"
+  | "Grün";
 
 export type Aktion =
   | "entnommen"
@@ -81,4 +93,9 @@ export interface Benachrichtigungsprotokoll {
   fehlermeldung: string | null;
   resend_id: string | null;
   zeitpunkt: string;
+}
+
+export interface FarbStatistik {
+  farbe: BeschriftungFarbe;
+  anzahl: number;
 }

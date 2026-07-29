@@ -28,6 +28,7 @@ create table if not exists public.keys (
   anlage               text not null default '',
   beschriftung         text not null default '',
   farbe                text not null default '',
+  beschriftung_farbe   text not null default 'Grau' check (beschriftung_farbe in ('Blau', 'Rot', 'Grau', 'Weiß', 'Violett', 'Orange', 'Schwarz', 'Gelb', 'Grün')),
   ist_bund             boolean not null default false,
   schluesselanzahl     integer not null default 1 check (schluesselanzahl >= 0),
   kommentar            text not null default '',
@@ -207,3 +208,16 @@ alter publication supabase_realtime add table public.keys;
 alter publication supabase_realtime add table public.key_events;
 
 alter table public.keys replica identity full;
+
+-- Funktion fuer Farb-Statistik (siehe Migration 003)
+create or replace function public.farb_statistik(von_position integer, bis_position integer)
+returns table (farbe text, anzahl bigint)
+language sql stable
+as $$
+  select beschriftung_farbe as farbe, count(*) as anzahl
+  from   public.keys
+  where  position >= von_position
+    and  position <= bis_position
+  group by beschriftung_farbe
+  order by farbe;
+$$;

@@ -6,7 +6,7 @@ import { StatusSchild } from "./Bausteine";
 import { EntnahmeDialog, RueckgabeDialog } from "./SchluesselDialoge";
 import { SchluesselFormularDialog, SchluesselLoeschenDialog } from "./SchluesselVerwaltenDialog";
 import { useSitzung } from "./Sitzung";
-import { datumZeit, dauerSeit } from "@/lib/format";
+import { datumZeit, dauerSeit, farbText, farbCss } from "@/lib/format";
 
 export default function SchluesselKarte({ schluessel }: { schluessel: Schluessel }) {
   const { profil } = useSitzung();
@@ -20,8 +20,43 @@ export default function SchluesselKarte({ schluessel }: { schluessel: Schluessel
     <div className="rounded-lg border border-tresor-line bg-white p-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="truncate text-sm font-semibold text-tresor-text">
-            {schluessel.beschriftung || "Ohne Beschriftung"}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="truncate text-sm font-semibold text-tresor-text">
+              {schluessel.beschriftung || "Ohne Beschriftung"}
+            </span>
+            {schluessel.beschriftung_farbe && (
+              <span
+                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
+                  schluessel.beschriftung_farbe === "Weiß"
+                    ? "border border-gray-300 bg-white text-gray-700"
+                    : "text-white"
+                }`}
+                style={{
+                  backgroundColor:
+                    schluessel.beschriftung_farbe === "Weiß"
+                      ? "white"
+                      : schluessel.beschriftung_farbe === "Blau"
+                        ? "#3b82f6"
+                        : schluessel.beschriftung_farbe === "Rot"
+                          ? "#ef4444"
+                          : schluessel.beschriftung_farbe === "Grau"
+                            ? "#6b7280"
+                            : schluessel.beschriftung_farbe === "Violett"
+                              ? "#8b5cf6"
+                              : schluessel.beschriftung_farbe === "Orange"
+                                ? "#f97316"
+                                : schluessel.beschriftung_farbe === "Schwarz"
+                                  ? "#1f2937"
+                                  : schluessel.beschriftung_farbe === "Gelb"
+                                    ? "#eab308"
+                                    : schluessel.beschriftung_farbe === "Grün"
+                                      ? "#22c55e"
+                                      : "#9ca3af",
+                }}
+              >
+                {farbText(schluessel.beschriftung_farbe)}
+              </span>
+            )}
           </div>
           <div className="mt-0.5 text-xs text-tresor-muted">
             Platz {schluessel.position} · Nr. {schluessel.schluesselnummer || "—"}
