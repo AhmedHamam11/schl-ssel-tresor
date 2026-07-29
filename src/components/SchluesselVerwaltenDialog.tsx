@@ -76,6 +76,7 @@ function ausSchluessel(k: Schluessel): Formular {
     farbe: k.farbe,
     ist_bund: k.ist_bund,
     schluesselanzahl: String(k.schluesselanzahl),
+    beschriftung_farbe: k.beschriftung_farbe ?? "#6B7280",
     kommentar: k.kommentar,
   };
 }
